@@ -49,6 +49,7 @@ body {
   height: 100%;
   margin: 0;
   font-family: var(--font-ui);
+  font-size: 14px;
   color: var(--text-main);
   background: radial-gradient(circle at 20% 20%, var(--bg-main) 0%, color-mix(in srgb, var(--bg-main), #000 10%) 100%);
 }
@@ -78,14 +79,17 @@ textarea {
 }
 
 .brand {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .brand strong {
   font-family: var(--font-brand);
-  font-size: 15px;
-  letter-spacing: 0.08em;
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  line-height: 1;
 }
 
 .brand span {
@@ -482,7 +486,7 @@ textarea {
   color: var(--text-soft);
 }
 
-.field input,
+.field input:not([type="checkbox"]):not([type="radio"]),
 .field select,
 .field textarea {
   border: var(--line) solid var(--border);
@@ -494,6 +498,25 @@ textarea {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+}
+
+.field > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-main);
+}
+
+.field input[type="checkbox"],
+.field input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
 }
 
 .grid-2 {
