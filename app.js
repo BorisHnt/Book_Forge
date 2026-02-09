@@ -13,6 +13,8 @@ import { initMultiPageImporter } from "./importers/multiPageImporter.js";
 import { createBookSettingsDraftController } from "./core/bookSettingsDraft.js";
 import { createPageManager } from "./core/pageManager.js";
 import { initDeletePageDialog } from "./ui/deletePageDialog.js";
+import { createPage } from "./core/document.js";
+import { applyBookLayoutRecalculation } from "./layout/spreadEngine.js";
 
 const THEME_KEY = "book-forge.theme.v1";
 
@@ -72,6 +74,76 @@ function renderAssets(store) {
     item.innerHTML = `<strong>${asset.name}</strong><small>${asset.type} · ${kb} KB</small>`;
     list.appendChild(item);
   });
+}
+
+function clearImportedContent(store) {
+  const state = store.getState();
+  const importedPages = state.document.pages.filter((page) => Boolean(page.imported));
+  const importedFrames = state.document.pages.reduce((count, page) => {
+    return count + (page.frames || []).filter((frame) => frame.imported || frame.importedFrom).length;
+  }, 0);
+  const referencedPages = state.document.pages.filter((page) => Boolean(page.backgroundReference));
+  const importedAssets = state.document.assets.length;
+
+  const totalTargets = importedPages.length + importedFrames + referencedPages.length + importedAssets;
+  if (!totalTargets) {
+    return { changed: false, removedPages: 0, removedFrames: 0, removedAssets: 0, removedReferences: 0 };
+  }
+
+  store.commit("clear-imported-content", (draft) => {
+    const initialPages = draft.document.pages;
+    draft.document.pages = initialPages.filter((page) => !page.imported);
+
+    draft.document.pages.forEach((page) => {
+      page.frames = (page.frames || []).filter((frame) => !(frame.imported || frame.importedFrom));
+      page.backgroundReference = null;
+    });
+
+    draft.document.assets = [];
+
+    if (!draft.document.pages.length) {
+      const sectionId = draft.document.sections[0]?.id;
+      if (!sectionId) {
+        const newSectionId = `section-${Math.random().toString(36).slice(2, 8)}`;
+        draft.document.sections.push({
+          id: newSectionId,
+          name: "Section 1",
+          pageIds: [],
+          pagination: { style: "arabic", startAt: 1, independent: false },
+          startOnOdd: false,
+          bookmark: true,
+          toc: true,
+          masterId: "master-default"
+        });
+      }
+
+      draft.document.pages.push(
+        createPage({
+          sectionId: draft.document.sections[0].id,
+          number: 1,
+          masterId: draft.document.sections[0].masterId || "master-default",
+          frames: []
+        })
+      );
+    }
+
+    applyBookLayoutRecalculation(draft.document);
+    draft.view.selectedPageId = draft.document.pages[0]?.id || null;
+    draft.view.pageSelectionIds = draft.view.selectedPageId ? [draft.view.selectedPageId] : [];
+    draft.view.selectedFrameId = null;
+    draft.view.selectedFramePageId = null;
+    draft.view.spreadIndex = 0;
+  });
+
+  store.emit("PAGE_REBUILT", "clear-imported");
+  store.emit("SPREADS_UPDATED", "clear-imported");
+  return {
+    changed: true,
+    removedPages: importedPages.length,
+    removedFrames: importedFrames,
+    removedAssets: importedAssets,
+    removedReferences: referencedPages.length
+  };
 }
 
 async function bootstrap() {
@@ -206,6 +278,22 @@ async function bootstrap() {
     saveDoc: () => {
       store.save();
       setStatus("Sauvegarde manuelle effectuée");
+    },
+    clearImported: () => {
+      const confirmed = window.confirm(
+        "Clear va supprimer tout le contenu importé (pages, cadres importés, fonds de référence et assets). Continuer ?"
+      );
+      if (!confirmed) {
+        return;
+      }
+      const result = clearImportedContent(store);
+      if (!result.changed) {
+        setStatus("Aucun contenu importé à supprimer");
+        return;
+      }
+      setStatus(
+        `Clear import: ${result.removedPages} pages, ${result.removedFrames} cadres, ${result.removedAssets} assets supprimés`
+      );
     },
     toggleTheme: () => {
       const nextTheme = document.body.dataset.theme === "ink" ? "paper" : "ink";

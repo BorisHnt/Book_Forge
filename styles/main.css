@@ -146,6 +146,17 @@ textarea {
   height: 28px;
 }
 
+.tool-btn.tool-btn-text {
+  min-width: auto;
+  padding: 0 10px;
+  gap: 6px;
+}
+
+.tool-btn.tool-btn-text span {
+  font-size: 12px;
+  line-height: 1;
+}
+
 .icon {
   width: var(--icon-size);
   height: var(--icon-size);
