@@ -3,6 +3,7 @@ const APP_ASSETS = [
   "./",
   "./index.html",
   "./styles/main.css",
+  "./assets/fonts/GeostarFill-Regular.ttf",
   "./app.js",
   "./manifest.webmanifest",
   "./sw.js",

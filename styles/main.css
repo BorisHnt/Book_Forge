@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Geostar Fill";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/GeostarFill-Regular.ttf") format("truetype");
+}
+
 :root {
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -6,6 +14,7 @@
   --anim-fast: 120ms;
   --font-ui: "Avenir Next", "Futura", "Trebuchet MS", sans-serif;
   --font-copy: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  --font-brand: "Geostar Fill", "Avenir Next", "Futura", "Trebuchet MS", sans-serif;
 
   --bg-main: #faf6f0;
   --bg-panel: #f4eae0;
@@ -74,6 +83,7 @@ textarea {
 }
 
 .brand strong {
+  font-family: var(--font-brand);
   font-size: 15px;
   letter-spacing: 0.08em;
 }
@@ -464,6 +474,7 @@ textarea {
 .field {
   display: grid;
   gap: 4px;
+  min-width: 0;
 }
 
 .field label {
@@ -480,6 +491,9 @@ textarea {
   color: var(--text-main);
   min-height: 30px;
   padding: 5px 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .grid-2 {
