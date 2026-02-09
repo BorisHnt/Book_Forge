@@ -16,22 +16,36 @@ function renderPageInner(page) {
     return `<div class="blank-note">Page blanche fictive (recto)</div>`;
   }
 
+  const referenceHtml =
+    page.backgroundReference && !page.backgroundReference.nonPrintable
+      ? `<div class="bg-ref" style="opacity:${Number(page.backgroundReference.opacity || 0.35)}">
+          ${
+            page.backgroundReference.dataUrl
+              ? `<img src="${page.backgroundReference.dataUrl}" alt="${escapeHtml(page.backgroundReference.sourceName || "Reference")}" />`
+              : `<div class="bg-ref-placeholder">${escapeHtml(page.backgroundReference.sourceName || "Reference")}</div>`
+          }
+        </div>`
+      : "";
+
   const frames = (page.frames || [])
+    .filter((frame) => !frame.hidden && !frame.nonPrintable)
     .map((frame) => {
       const left = `${frame.x || 0}%`;
       const top = `${frame.y || 0}%`;
       const width = `${frame.w || 100}%`;
       const height = `${frame.h || 100}%`;
-      return `<div class="f" style="left:${left};top:${top};width:${width};height:${height};">${escapeHtml(
-        frame.content || ""
-      )}</div>`;
+      const rotation = Number(frame.rotation || 0);
+      const image = frame.type === "image" && frame.src
+        ? `<img src="${frame.src}" alt="${escapeHtml(frame.content || "image")}" style="width:100%;height:100%;object-fit:cover;"/>`
+        : escapeHtml(frame.content || "");
+      return `<div class="f" style="left:${left};top:${top};width:${width};height:${height};transform:rotate(${rotation}deg);">${image}</div>`;
     })
     .join("");
 
-  return frames;
+  return `${referenceHtml}${frames}`;
 }
 
-function buildPrintableDocument(doc, options) {
+export function buildPrintableDocument(doc, options) {
   const size = getPageSizeMm(doc);
   const sequence = getPrintablePageSequence(doc, {
     spreads: options.spreads
@@ -106,6 +120,9 @@ function buildPrintableDocument(doc, options) {
           .inner { position:absolute; inset: 8mm; }
           .blank-note { position:absolute; inset:0; display:grid; place-items:center; color:#888; font:12px 'Avenir Next', sans-serif; }
           .f { position:absolute; border:1px solid #888; padding:4px; overflow:hidden; font-size:11px; }
+          .bg-ref { position:absolute; inset:0; }
+          .bg-ref img { width:100%; height:100%; object-fit:cover; }
+          .bg-ref-placeholder { position:absolute; inset:0; display:grid; place-items:center; color:#999; border:1px dashed #bbb; }
         </style>
       </head>
       <body>

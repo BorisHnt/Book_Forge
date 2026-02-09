@@ -28,6 +28,8 @@ export class Store {
       },
       view: {
         selectedPageId: null,
+        selectedFrameId: null,
+        selectedFramePageId: null,
         spreadIndex: 0,
         tool: "selection",
         zoom: 1,

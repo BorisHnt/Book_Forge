@@ -1,5 +1,8 @@
 import { hydrateIcons } from "./icons.js";
 import { buildPageFlow } from "../layout/spreadEngine.js";
+import { getPageSizePx } from "../core/document.js";
+import { getPageSlotInfo } from "../layout/spreadEngine.js";
+import { frameOverflowsMargins } from "../layout/frameEngine.js";
 
 function collectChecks(doc) {
   const checks = [];
@@ -76,6 +79,30 @@ function collectChecks(doc) {
     status: usesRgb ? "warning" : "ok",
     label: usesRgb ? "Styles couleur en RGB" : "Palette neutre",
     suggestion: usesRgb ? "Prévoir conversion CMYK à l'export print" : ""
+  });
+
+  const pageSizePx = getPageSizePx(doc);
+  doc.pages.forEach((page) => {
+    const slot = getPageSlotInfo(doc, page.id, { includeVirtualFrontBlank: doc.settings.startOnRight });
+    (page.frames || [])
+      .filter((frame) => !frame.hidden)
+      .forEach((frame) => {
+        const overflow = frameOverflowsMargins(frame, {
+          doc,
+          page,
+          side: slot?.side || "right",
+          pageSizePx
+        });
+        if (overflow) {
+          checks.push({
+            category: "Géométrie",
+            status: "warning",
+            label: `Cadre hors marges (${page.name})`,
+            pageId: page.id,
+            suggestion: "Déplacer/redimensionner le cadre ou ajuster les marges"
+          });
+        }
+      });
   });
 
   checks.push({

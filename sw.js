@@ -15,6 +15,9 @@ const APP_ASSETS = [
   "./core/store.js",
   "./layout/spreadEngine.js",
   "./layout/marginOverlay.js",
+  "./layout/backgroundReferenceLayer.js",
+  "./layout/frameEngine.js",
+  "./layout/pageRenderer.js",
   "./layout/pages.js",
   "./layout/sections.js",
   "./layout/masters.js",
@@ -26,6 +29,8 @@ const APP_ASSETS = [
   "./ui/exportChecklist.js",
   "./ui/panels.js",
   "./importers/multiPageImporter.js",
+  "./importers/pdfImporter.js",
+  "./importers/docxImporter.js",
   "./exporters/pdf.js"
 ];
 

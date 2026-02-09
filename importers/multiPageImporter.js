@@ -1,4 +1,8 @@
 import { createAsset, createPage } from "../core/document.js";
+import { applyBookLayoutRecalculation, getPageSlotInfo } from "../layout/spreadEngine.js";
+import { ensurePageFrames, normalizeFrame } from "../layout/frameEngine.js";
+import { buildPdfImportPages } from "./pdfImporter.js";
+import { buildDocxImportPages } from "./docxImporter.js";
 import { hydrateIcons } from "../ui/icons.js";
 
 function estimatePageCount(file) {
@@ -16,18 +20,6 @@ function estimatePageCount(file) {
     return 3;
   }
   return 2;
-}
-
-function splitTextInPages(text, chunk = 1200) {
-  const sanitized = text.replace(/\s+/g, " ").trim();
-  if (!sanitized) {
-    return ["Page vide"];
-  }
-  const pages = [];
-  for (let index = 0; index < sanitized.length; index += chunk) {
-    pages.push(sanitized.slice(index, index + chunk));
-  }
-  return pages;
 }
 
 function parseRange(input, max) {
@@ -58,6 +50,27 @@ function closeModal(root) {
   root.innerHTML = "";
 }
 
+function createImportSection(name, masterId) {
+  return {
+    id: `section-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    pageIds: [],
+    pagination: { style: "arabic", startAt: 1, independent: true },
+    startOnOdd: false,
+    bookmark: true,
+    toc: true,
+    masterId
+  };
+}
+
+async function buildImportedPages(file, options) {
+  if ((file.type || "").includes("pdf") || file.name.toLowerCase().endsWith(".pdf")) {
+    return buildPdfImportPages(file, options);
+  }
+
+  return buildDocxImportPages(file, options);
+}
+
 export function initMultiPageImporter(store) {
   const modalRoot = document.getElementById("modalRoot");
 
@@ -74,15 +87,15 @@ export function initMultiPageImporter(store) {
               <input type="file" id="importFilesInput" multiple accept=".pdf,.docx,.epub,.html,.htm,.txt,.md" />
             </label>
             <div class="import-files" id="importFileList"></div>
+
             <div class="grid-3">
               <label class="field">Mode import
                 <select id="importMode">
                   <option value="all">Importer tout</option>
                   <option value="range">Plage</option>
-                  <option value="selected">Pages sélectionnées</option>
                 </select>
               </label>
-              <label class="field">Plage/sélection (ex: 1-3,6)
+              <label class="field">Plage (ex: 1-3,6)
                 <input id="importRange" placeholder="1-3,6" />
               </label>
               <label class="field">Insertion
@@ -92,6 +105,7 @@ export function initMultiPageImporter(store) {
                 </select>
               </label>
             </div>
+
             <div class="grid-3">
               <label class="field">Créer section par fichier
                 <select id="createSection">
@@ -106,9 +120,22 @@ export function initMultiPageImporter(store) {
                 <select id="masterMapping"></select>
               </label>
             </div>
+
+            <div class="grid-3">
+              <label class="field">PDF mode
+                <select id="pdfParseMode">
+                  <option value="flat">Image plate</option>
+                  <option value="analyze">Analyse blocs</option>
+                </select>
+              </label>
+              <label class="field"><span><input type="checkbox" id="placeAsReference" checked /> Placer comme référence (fond verrouillé)</span></label>
+              <label class="field">Opacité fond ${35}%
+                <input type="range" id="referenceOpacity" min="0.05" max="1" step="0.05" value="0.35" />
+              </label>
+            </div>
           </div>
           <footer>
-            <small>Import frontend V1: pour PDF/DOCX/EPUB, placeholders paginés générés.</small>
+            <small>Chaque page importée est visible dans le canvas et transformée en cadres éditables.</small>
             <div class="inline-actions">
               <button class="tool-btn" data-action="doImport" data-tool="import" title="Importer"></button>
             </div>
@@ -127,6 +154,12 @@ export function initMultiPageImporter(store) {
     const filesInput = modalRoot.querySelector("#importFilesInput");
     const fileList = modalRoot.querySelector("#importFileList");
     const selectedFiles = [];
+
+    const opacityField = modalRoot.querySelector("#referenceOpacity");
+    opacityField.addEventListener("input", () => {
+      const label = opacityField.closest("label");
+      label.firstChild.textContent = `Opacité fond ${Math.round(Number(opacityField.value) * 100)}%`;
+    });
 
     filesInput.addEventListener("change", () => {
       selectedFiles.length = 0;
@@ -160,8 +193,12 @@ export function initMultiPageImporter(store) {
       const shouldCreateSection = modalRoot.querySelector("#createSection").value === "true";
       const mappedStyle = styleSelect.value;
       const mappedMaster = masterSelect.value;
+      const parseMode = modalRoot.querySelector("#pdfParseMode").value;
+      const placeAsReference = modalRoot.querySelector("#placeAsReference").checked;
+      const referenceOpacity = Number(modalRoot.querySelector("#referenceOpacity").value);
 
       const imports = [];
+
       for (const file of selectedFiles) {
         const estimated = estimatePageCount(file);
         const selectedNumbers =
@@ -169,27 +206,30 @@ export function initMultiPageImporter(store) {
             ? Array.from({ length: estimated }, (_, i) => i + 1)
             : parseRange(rangeInput, estimated);
 
-        let textPages = [];
-        if (/\.txt$|\.md$|\.html?$/.test(file.name.toLowerCase())) {
-          try {
-            const text = await file.text();
-            textPages = splitTextInPages(text);
-          } catch {
-            textPages = ["Impossible de lire ce fichier."];
-          }
-        }
+        const built = await buildImportedPages(file, {
+          selectedNumbers,
+          mappedStyle,
+          mappedMaster,
+          parseMode,
+          placeAsReference,
+          referenceOpacity
+        });
 
         imports.push({
           file,
           selectedNumbers,
-          textPages,
+          importedPages: built.pages,
+          estimatedPages: built.estimatedPages,
           mappedStyle,
           mappedMaster,
           createSection: shouldCreateSection
         });
       }
 
-      store.commit("multi-import", (draft) => {
+      let createdPageIds = [];
+      let createdFrameCount = 0;
+
+      store.commit("multi-import-v2", (draft) => {
         const pages = draft.document.pages;
         const activeIndex = pages.findIndex((page) => page.id === draft.view.selectedPageId);
         let cursor = insertMode === "after" ? Math.max(0, activeIndex + 1) : pages.length;
@@ -198,52 +238,61 @@ export function initMultiPageImporter(store) {
           let targetSectionId = pages[activeIndex]?.sectionId || draft.document.sections[0]?.id;
 
           if (entry.createSection) {
-            const newSection = {
-              id: `section-${Math.random().toString(36).slice(2, 8)}`,
-              name: entry.file.name.replace(/\.[^.]+$/, ""),
-              pageIds: [],
-              pagination: { style: "arabic", startAt: 1, independent: true },
-              startOnOdd: false,
-              bookmark: true,
-              toc: true,
-              masterId: entry.mappedMaster
-            };
-            draft.document.sections.push(newSection);
-            targetSectionId = newSection.id;
+            const section = createImportSection(entry.file.name.replace(/\.[^.]+$/, ""), entry.mappedMaster);
+            draft.document.sections.push(section);
+            targetSectionId = section.id;
           }
 
-          entry.selectedNumbers.forEach((number, index) => {
+          entry.importedPages.forEach((importedPage) => {
             const page = createPage({
               sectionId: targetSectionId,
               masterId: entry.mappedMaster,
-              number,
-              frames: [
-                {
-                  id: `frame-${Math.random().toString(36).slice(2, 8)}`,
-                  type: "text",
-                  x: 8,
-                  y: 10,
-                  w: 84,
-                  h: 78,
-                  styleId: entry.mappedStyle,
-                  content:
-                    entry.textPages[index] ||
-                    `Import ${entry.file.name} — page ${number}.\n(Placeholder V1 pour ${entry.file.type || "fichier"})`
-                }
-              ]
+              number: pages.length + 1,
+              frames: importedPage.frames.map((frame) =>
+                normalizeFrame({
+                  ...frame,
+                  imported: true,
+                  importedFrom: importedPage.source
+                }, frame.type)
+              )
             });
+
+            ensurePageFrames(page);
+            page.backgroundReference = importedPage.backgroundReference || null;
+            page.imported = {
+              source: importedPage.source,
+              fileName: entry.file.name,
+              sourcePage: importedPage.pageNumber,
+              mode: importedPage.mode || "structured",
+              rotation: 0,
+              zoom: 1
+            };
 
             pages.splice(cursor, 0, page);
             cursor += 1;
+            createdPageIds.push(page.id);
+            createdFrameCount += page.frames.length;
           });
 
           draft.document.assets.push(createAsset(entry.file));
         });
 
-        if (draft.document.pages.length) {
-          draft.view.selectedPageId = draft.document.pages[Math.min(cursor - 1, draft.document.pages.length - 1)].id;
+        applyBookLayoutRecalculation(draft.document);
+        if (createdPageIds.length) {
+          const lastId = createdPageIds[createdPageIds.length - 1];
+          draft.view.selectedPageId = lastId;
+          const slot = getPageSlotInfo(draft.document, lastId, {
+            includeVirtualFrontBlank: draft.document.settings.startOnRight
+          });
+          draft.view.spreadIndex = slot?.spreadIndex || 0;
+          draft.view.selectedFrameId = null;
+          draft.view.selectedFramePageId = null;
         }
       });
+
+      store.emit("IMPORT_PAGE_CREATED", { count: createdPageIds.length, pageIds: createdPageIds });
+      store.emit("IMPORT_FRAMES_CREATED", { count: createdFrameCount });
+      store.emit("PAGE_REBUILT", { reason: "import" });
 
       closeModal(modalRoot);
     });
