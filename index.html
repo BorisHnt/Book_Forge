@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="BOOK FORGE — Where pages are crafted" />
+    <title>BOOK FORGE — Where pages are crafted</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles/main.css" />
+  </head>
+  <body data-theme="paper">
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <strong>BOOK FORGE</strong>
+          <span>Where pages are crafted</span>
+        </div>
+        <div class="toolbar" id="mainToolbar">
+          <button class="tool-btn" data-tool="selection" data-shortcut="V" title="Sélection (V)"></button>
+          <button class="tool-btn" data-tool="textFrame" data-shortcut="T" title="Cadre texte (T)"></button>
+          <button class="tool-btn" data-tool="imageFrame" data-shortcut="I" title="Cadre image (I)"></button>
+          <span class="sep"></span>
+          <button class="tool-btn" data-action="undo" data-tool="undo" data-shortcut="Ctrl+Z" title="Annuler (Ctrl+Z)"></button>
+          <button class="tool-btn" data-action="redo" data-tool="redo" data-shortcut="Ctrl+Shift+Z" title="Rétablir (Ctrl+Shift+Z)"></button>
+          <span class="sep"></span>
+          <button class="tool-btn" data-action="zoomOut" data-tool="zoomOut" data-shortcut="Ctrl+-" title="Zoom - (Ctrl+-)"></button>
+          <button class="tool-btn" data-action="zoomIn" data-tool="zoomIn" data-shortcut="Ctrl++" title="Zoom + (Ctrl++)"></button>
+          <span class="sep"></span>
+          <button class="tool-btn" data-action="import" data-tool="import" data-shortcut="Ctrl+Shift+I" title="Import multi-pages (Ctrl+Shift+I)"></button>
+          <button class="tool-btn" data-action="togglePreview" data-tool="printPreview" data-shortcut="P" title="Aperçu print (P)"></button>
+          <button class="tool-btn" data-action="runChecklist" data-tool="exportChecklist" data-shortcut="Ctrl+K" title="Checklist export (Ctrl+K)"></button>
+          <button class="tool-btn" data-action="exportPdf" data-tool="exportPdf" data-shortcut="Ctrl+E" title="Export PDF (Ctrl+E)"></button>
+          <span class="sep"></span>
+          <button class="tool-btn" data-action="toggleTheme" data-tool="theme" data-shortcut="D" title="Thème clair/sombre (D)"></button>
+          <button class="tool-btn" data-action="saveDoc" data-tool="save" data-shortcut="Ctrl+S" title="Sauvegarder (Ctrl+S)"></button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="dock dock-left" id="leftDock">
+          <div class="dock-header">
+            <div class="tabs" id="leftTabs">
+              <button class="tab active" data-tab-target="panel-pages" data-tool="pages" title="Pages"></button>
+              <button class="tab" data-tab-target="panel-sections" data-tool="sections" title="Sections"></button>
+              <button class="tab" data-tab-target="panel-masters" data-tool="masters" title="Gabarits"></button>
+              <button class="tab" data-tab-target="panel-assets" data-tool="imageFrame" title="Assets"></button>
+            </div>
+            <button class="tool-btn compact" data-action="toggleLeftDock" data-tool="chevronLeft" title="Masquer panneau gauche"></button>
+          </div>
+
+          <section class="panel active" id="panel-pages">
+            <div class="panel-title-row">
+              <h2>Pages & Spreads</h2>
+              <div class="mini-actions">
+                <button class="tool-btn compact" data-action="addPage" data-tool="add" title="Ajouter page"></button>
+                <button class="tool-btn compact" data-action="toggleSpread" data-tool="grid" title="Mode spread"></button>
+              </div>
+            </div>
+            <div class="panel-body" id="pagesList"></div>
+          </section>
+
+          <section class="panel" id="panel-sections">
+            <div class="panel-title-row">
+              <h2>Sections & Chapitres</h2>
+              <div class="mini-actions">
+                <button class="tool-btn compact" data-action="addSection" data-tool="add" title="Ajouter section"></button>
+              </div>
+            </div>
+            <div class="panel-body" id="sectionsList"></div>
+          </section>
+
+          <section class="panel" id="panel-masters">
+            <div class="panel-title-row">
+              <h2>Gabarits</h2>
+              <div class="mini-actions">
+                <button class="tool-btn compact" data-action="addMaster" data-tool="add" title="Ajouter gabarit"></button>
+              </div>
+            </div>
+            <div class="panel-body" id="mastersList"></div>
+          </section>
+
+          <section class="panel" id="panel-assets">
+            <div class="panel-title-row">
+              <h2>Assets</h2>
+            </div>
+            <div class="panel-body" id="assetsList"></div>
+          </section>
+        </aside>
+
+        <div class="resizer" data-resize="left" role="separator" aria-orientation="vertical"></div>
+
+        <main class="canvas-area" id="canvasArea">
+          <div class="canvas-toolbar">
+            <button class="tool-btn compact" data-action="prevSpread" data-tool="chevronLeft" title="Spread précédent"></button>
+            <span id="spreadLabel">Spread 1</span>
+            <button class="tool-btn compact" data-action="nextSpread" data-tool="chevronRight" title="Spread suivant"></button>
+            <span class="sep"></span>
+            <button class="tool-btn compact" data-action="fitView" data-tool="zoomOut" title="Ajuster vue"></button>
+            <button class="tool-btn compact" data-action="toggleRulers" data-tool="grid" title="Règles et guides"></button>
+            <span class="canvas-zoom" id="zoomLabel">100%</span>
+          </div>
+          <section class="spread-viewport" id="spreadViewport"></section>
+        </main>
+
+        <div class="resizer" data-resize="right" role="separator" aria-orientation="vertical"></div>
+
+        <aside class="dock dock-right" id="rightDock">
+          <div class="dock-header">
+            <div class="tabs" id="rightTabs">
+              <button class="tab active" data-tab-target="panel-book" data-tool="bookSettings" title="Paramètres du livre"></button>
+              <button class="tab" data-tab-target="panel-styles" data-tool="styles" title="Styles"></button>
+              <button class="tab" data-tab-target="panel-grid" data-tool="grid" title="Grilles"></button>
+              <button class="tab" data-tab-target="panel-export" data-tool="exportPdf" title="Export"></button>
+            </div>
+            <button class="tool-btn compact" data-action="toggleRightDock" data-tool="chevronRight" title="Masquer panneau droit"></button>
+          </div>
+
+          <section class="panel active" id="panel-book">
+            <div class="panel-title-row">
+              <h2>Paramètres du Livre</h2>
+            </div>
+            <div class="panel-body" id="bookSettingsPanel"></div>
+          </section>
+
+          <section class="panel" id="panel-styles">
+            <div class="panel-title-row">
+              <h2>Styles</h2>
+            </div>
+            <div class="panel-body" id="stylesPanel"></div>
+          </section>
+
+          <section class="panel" id="panel-grid">
+            <div class="panel-title-row">
+              <h2>Grilles & Colonnes</h2>
+            </div>
+            <div class="panel-body" id="gridPanel"></div>
+          </section>
+
+          <section class="panel" id="panel-export">
+            <div class="panel-title-row">
+              <h2>Preview & Export</h2>
+            </div>
+            <div class="panel-body" id="exportPanel"></div>
+          </section>
+        </aside>
+      </div>
+
+      <footer class="status-bar">
+        <span id="docStatus">Document prêt.</span>
+        <span id="offlineStatus">Offline-ready</span>
+      </footer>
+    </div>
+
+    <div id="modalRoot"></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

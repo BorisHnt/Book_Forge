@@ -1,0 +1,11 @@
+{
+  "name": "BOOK FORGE",
+  "short_name": "BookForge",
+  "description": "BOOK FORGE — Where pages are crafted",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#FAF6F0",
+  "theme_color": "#F4EAE0",
+  "lang": "fr",
+  "icons": []
+}
