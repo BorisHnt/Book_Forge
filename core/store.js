@@ -23,14 +23,16 @@ export class Store {
         leftDockCollapsed: false,
         rightDockCollapsed: false,
         leftTab: "panel-pages",
-        rightTab: "panel-book"
+        rightTab: "panel-book",
+        bookSettingsAutoApply: false
       },
       view: {
         selectedPageId: null,
         spreadIndex: 0,
         tool: "selection",
         zoom: 1,
-        printPreview: false
+        printPreview: false,
+        bookSettingsDraft: null
       }
     };
     this.load();

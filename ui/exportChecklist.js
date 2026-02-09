@@ -1,4 +1,5 @@
 import { hydrateIcons } from "./icons.js";
+import { buildPageFlow } from "../layout/spreadEngine.js";
 
 function collectChecks(doc) {
   const checks = [];
@@ -131,6 +132,28 @@ function collectChecks(doc) {
     label: doc.settings.spreads ? "Spreads activés" : "Export en pages simples",
     suggestion: doc.settings.spreads ? "" : "Activer spreads pour BAT imprimeur"
   });
+
+  if (doc.settings.startOnRight && !doc.settings.spreads) {
+    checks.push({
+      category: "Export",
+      status: "error",
+      label: "Incohérence critique: \"Commencer sur page droite\" actif sans spreads",
+      suggestion: "Appliquer les paramètres du livre pour recalculer la pagination réelle"
+    });
+  }
+
+  if (doc.settings.startOnRight) {
+    const flow = buildPageFlow(doc, { includeVirtualFrontBlank: true, forceSpreadMode: true });
+    const hasVirtualFrontBlank = Boolean(flow[0]?.isVirtualBlank);
+    checks.push({
+      category: "Pagination",
+      status: hasVirtualFrontBlank ? "ok" : "error",
+      label: hasVirtualFrontBlank
+        ? "Page blanche fictive correctement insérée avant la page 1"
+        : "Page blanche fictive manquante avant la page 1",
+      suggestion: hasVirtualFrontBlank ? "" : "Réappliquer les paramètres du livre"
+    });
+  }
 
   return checks;
 }

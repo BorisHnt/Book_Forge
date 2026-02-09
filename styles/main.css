@@ -323,6 +323,22 @@ textarea {
   overflow: hidden;
 }
 
+.page-canvas.virtual-blank {
+  background: color-mix(in srgb, var(--paper), #e6e0d6 35%);
+  border-style: dashed;
+}
+
+.blank-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 16px;
+  color: #85766a;
+  font: 11px/1.35 var(--font-ui);
+}
+
 .page-label {
   position: absolute;
   top: 6px;
@@ -394,20 +410,71 @@ textarea {
   pointer-events: none;
 }
 
-.margin-overlay {
+.margin-system-overlay {
+  position: absolute;
   inset: 0;
-  border-style: solid;
+  pointer-events: none;
   z-index: 2;
 }
 
-.bleed-overlay {
-  z-index: 2;
-  border: 1px dashed #b96767;
+.margin-zone,
+.margin-line,
+.margin-box,
+.margin-label,
+.margin-legend {
+  position: absolute;
+  pointer-events: none;
 }
 
-.safe-overlay {
-  z-index: 2;
-  border: 1px dashed #4f8d6f;
+.margin-zone {
+  transition: opacity var(--anim-fast);
+}
+
+.margin-line {
+  box-sizing: border-box;
+}
+
+.margin-box {
+  box-sizing: border-box;
+}
+
+.margin-label {
+  background: color-mix(in srgb, #fff, transparent 35%);
+  border: 1px solid color-mix(in srgb, var(--border), #000 10%);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-family: var(--font-ui);
+  color: #555;
+}
+
+.margin-legend {
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  max-width: calc(100% - 14px);
+  padding: 3px 5px;
+  border: 1px solid color-mix(in srgb, var(--border), #000 10%);
+  border-radius: 4px;
+  background: color-mix(in srgb, #fff, transparent 24%);
+  font-size: 10px;
+  font-family: var(--font-ui);
+  color: #444;
+}
+
+.margin-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.margin-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  display: inline-block;
 }
 
 .grid-overlay {
@@ -508,6 +575,16 @@ textarea {
   color: var(--text-main);
 }
 
+.field-dirty > label,
+.field-dirty > span {
+  color: color-mix(in srgb, var(--accent), var(--text-main) 30%);
+}
+
+.dirty-field {
+  border-color: color-mix(in srgb, var(--accent), var(--border) 40%) !important;
+  background: color-mix(in srgb, var(--bg-hover), transparent 18%) !important;
+}
+
 .field input[type="checkbox"],
 .field input[type="radio"] {
   width: 14px;
@@ -551,6 +628,30 @@ textarea {
 .status-pill.error {
   border-color: #b44a4a;
   color: #b44a4a;
+}
+
+.book-settings-draft-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pending-badge {
+  font-size: 11px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+}
+
+.pending-badge.pending {
+  border-color: color-mix(in srgb, var(--accent), var(--border) 40%);
+  color: color-mix(in srgb, var(--accent), var(--text-main) 20%);
+}
+
+.pending-badge.clean {
+  color: var(--text-soft);
 }
 
 .preview-mode .page-canvas {

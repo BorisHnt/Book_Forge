@@ -10,6 +10,7 @@ import { initPrintPreviewModule } from "./ui/printPreview.js";
 import { initExportChecklistModule } from "./ui/exportChecklist.js";
 import { initPdfExporter } from "./exporters/pdf.js";
 import { initMultiPageImporter } from "./importers/multiPageImporter.js";
+import { createBookSettingsDraftController } from "./core/bookSettingsDraft.js";
 
 const THEME_KEY = "book-forge.theme.v1";
 
@@ -80,6 +81,7 @@ async function bootstrap() {
 
   const store = new Store();
   const panels = initPanels(store);
+  const draftController = createBookSettingsDraftController(store);
 
   const pagesApi = initPagesModule(store, {
     pagesList: document.getElementById("pagesList"),
@@ -100,9 +102,13 @@ async function bootstrap() {
     stylesPanel: document.getElementById("stylesPanel")
   });
 
-  initBookSettingsModule(store, {
-    bookSettingsPanel: document.getElementById("bookSettingsPanel")
-  });
+  initBookSettingsModule(
+    store,
+    {
+      bookSettingsPanel: document.getElementById("bookSettingsPanel")
+    },
+    draftController
+  );
 
   initGridPanelModule(store, {
     gridPanel: document.getElementById("gridPanel")
@@ -139,6 +145,21 @@ async function bootstrap() {
 
   store.subscribe("saved", () => {
     setStatus("Document sauvegardé localement");
+  });
+
+  store.subscribe("BOOK_SETTINGS_DIRTY", () => {
+    const draft = draftController.getDraftState();
+    if (draft.dirty) {
+      setStatus("Paramètres du livre: modifications en attente");
+    }
+  });
+
+  store.subscribe("BOOK_SETTINGS_APPLY", () => {
+    setStatus("Paramètres du livre appliqués");
+  });
+
+  store.subscribe("BOOK_SETTINGS_CANCEL", () => {
+    setStatus("Brouillon paramètres annulé");
   });
 
   const actions = {

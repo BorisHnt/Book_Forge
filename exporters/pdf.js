@@ -1,60 +1,122 @@
 import { getPageSizeMm } from "../core/document.js";
+import { getPrintablePageSequence } from "../layout/spreadEngine.js";
 import { hydrateIcons } from "../ui/icons.js";
 
-function buildPrintableDocument(doc, options) {
-  const size = getPageSizeMm(doc);
+function escapeHtml(input) {
+  return String(input || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-  const pages = doc.pages
-    .map((page) => {
-      const frames = (page.frames || [])
-        .map((frame) => {
-          const left = `${frame.x || 0}%`;
-          const top = `${frame.y || 0}%`;
-          const width = `${frame.w || 100}%`;
-          const height = `${frame.h || 100}%`;
-          return `<div style="position:absolute;left:${left};top:${top};width:${width};height:${height};border:1px solid #888;padding:4px;overflow:hidden;font-size:11px;">${
-            (frame.content || "").replace(/</g, "&lt;")
-          }</div>`;
-        })
-        .join("");
-      return `
-        <article class="p" style="width:${size.width}mm;height:${size.height}mm;">
-          <div class="head">${doc.title} · ${page.displayNumber || page.autoNumber}</div>
-          <div class="inner">${frames}</div>
-        </article>
-      `;
+function renderPageInner(page) {
+  if (page?.isVirtualBlank) {
+    return `<div class="blank-note">Page blanche fictive (recto)</div>`;
+  }
+
+  const frames = (page.frames || [])
+    .map((frame) => {
+      const left = `${frame.x || 0}%`;
+      const top = `${frame.y || 0}%`;
+      const width = `${frame.w || 100}%`;
+      const height = `${frame.h || 100}%`;
+      return `<div class="f" style="left:${left};top:${top};width:${width};height:${height};">${escapeHtml(
+        frame.content || ""
+      )}</div>`;
     })
     .join("");
 
+  return frames;
+}
+
+function buildPrintableDocument(doc, options) {
+  const size = getPageSizeMm(doc);
+  const sequence = getPrintablePageSequence(doc, {
+    spreads: options.spreads
+  });
+
   const sectionBookmarks = doc.sections
     .filter((section) => section.bookmark)
-    .map((section) => `<li>${section.name}</li>`)
+    .map((section) => `<li>${escapeHtml(section.name)}</li>`)
     .join("");
+
+  const spreadSheets = [];
+  if (options.spreads) {
+    for (let index = 0; index < sequence.length; index += 2) {
+      const left = sequence[index] || null;
+      const right = sequence[index + 1] || null;
+      const sheet = `
+        <article class="sheet spread">
+          ${[left, right]
+            .map((slot) => {
+              if (!slot) {
+                return `<section class="slot empty"></section>`;
+              }
+              const page = slot.page;
+              const label = slot.isVirtualBlank
+                ? "Blanche"
+                : `${escapeHtml(page.displayNumber || page.autoNumber)} (${slot.side})`;
+              return `
+                <section class="slot page" style="width:${size.width}mm;height:${size.height}mm;">
+                  <div class="head">${label}</div>
+                  <div class="inner">${renderPageInner(page)}</div>
+                </section>
+              `;
+            })
+            .join("")}
+        </article>
+      `;
+      spreadSheets.push(sheet);
+    }
+  } else {
+    sequence.forEach((slot) => {
+      const page = slot.page;
+      const label = slot.isVirtualBlank
+        ? "Blanche"
+        : `${escapeHtml(page.displayNumber || page.autoNumber)} (${slot.side})`;
+      spreadSheets.push(`
+        <article class="sheet single">
+          <section class="slot page" style="width:${size.width}mm;height:${size.height}mm;">
+            <div class="head">${label}</div>
+            <div class="inner">${renderPageInner(page)}</div>
+          </section>
+        </article>
+      `);
+    });
+  }
 
   return `
     <!doctype html>
     <html lang="fr">
       <head>
         <meta charset="utf-8" />
-        <title>${doc.title}</title>
+        <title>${escapeHtml(doc.title)}</title>
         <style>
           @page { size: ${size.width}mm ${size.height}mm; margin: ${options.bleed ? "0" : "8mm"}; }
-          body { font-family: 'Palatino Linotype', serif; color:#222; }
-          .meta { margin-bottom: 8mm; font: 12px/1.4 'Avenir Next', 'Trebuchet MS', sans-serif; }
+          body { font-family: 'Palatino Linotype', serif; color:#222; margin:0; padding:0; }
+          .meta { margin: 0 0 8mm 0; font: 12px/1.4 'Avenir Next', 'Trebuchet MS', sans-serif; }
           .bookmarks { margin: 0 0 8mm 0; padding-left: 16px; font-size: 11px; }
-          .p { position: relative; break-after: page; border: ${options.cropMarks ? "1px dashed #555" : "none"}; background: #fff; }
-          .head { position:absolute; top:2mm; left:3mm; font: 10px 'Avenir Next', sans-serif; color:#666; }
+          .sheet { break-after: page; }
+          .sheet.spread { display:flex; gap:2mm; }
+          .slot.page { position: relative; border: ${options.cropMarks ? "1px dashed #555" : "none"}; background:#fff; overflow:hidden; }
+          .slot.empty { flex: 1 1 auto; }
+          .head { position:absolute; top:2mm; left:3mm; font: 10px 'Avenir Next', sans-serif; color:#666; z-index:3; }
           .inner { position:absolute; inset: 8mm; }
+          .blank-note { position:absolute; inset:0; display:grid; place-items:center; color:#888; font:12px 'Avenir Next', sans-serif; }
+          .f { position:absolute; border:1px solid #888; padding:4px; overflow:hidden; font-size:11px; }
         </style>
       </head>
       <body>
         <div class="meta">
-          <strong>${doc.title}</strong><br/>
+          <strong>${escapeHtml(doc.title)}</strong><br/>
           Profil: ${options.profile} · Couleur: ${options.colorMode} · Compression: ${options.compression}
           <br/>Bleed: ${options.bleed ? "Oui" : "Non"} · Traits de coupe: ${options.cropMarks ? "Oui" : "Non"} · Fonts intégrées: ${options.embedFonts ? "Oui" : "Non"}
+          <br/>Recto à droite: ${doc.settings.startOnRight ? "Oui" : "Non"}
         </div>
         <ul class="bookmarks">${sectionBookmarks || "<li>Aucun signet section</li>"}</ul>
-        ${pages}
+        ${spreadSheets.join("")}
       </body>
     </html>
   `;

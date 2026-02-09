@@ -1,55 +1,41 @@
+import { createPage, findPage, getPageSizePx, mmToPx } from "../core/document.js";
 import {
-  createPage,
-  findPage,
-  getPageSizePx,
-  mmToPx,
-  recomputePagination
-} from "../core/document.js";
+  applyBookLayoutRecalculation,
+  buildSpreadGroups,
+  getPageSlotInfo,
+  spreadModeEnabled
+} from "./spreadEngine.js";
+import { renderMarginOverlay } from "./marginOverlay.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function getPageGroups(doc) {
-  const pages = doc.pages;
-  if (!doc.settings.spreads) {
-    return pages.map((page) => [page]);
-  }
-
-  const groups = [];
-  for (let index = 0; index < pages.length; index += 2) {
-    groups.push(pages.slice(index, index + 2));
-  }
-  return groups;
-}
-
-function getMarginsPx(doc, pageIndex) {
-  const settings = doc.settings;
-  const base = settings.margins;
-  const odd = (pageIndex + 1) % 2 === 1;
-  const compensation = base.oddEvenCompensation || 0;
-
-  const insideExtra = odd ? compensation : -compensation;
-  const outsideExtra = odd ? -compensation : compensation;
-
-  const insidePx = mmToPx(Math.max(0, base.inside + insideExtra), settings.dpi);
-  const outsidePx = mmToPx(Math.max(0, base.outside + outsideExtra), settings.dpi);
-
-  return {
-    top: mmToPx(base.top, settings.dpi),
-    bottom: mmToPx(base.bottom, settings.dpi),
-    left: odd ? insidePx : outsidePx,
-    right: odd ? outsidePx : insidePx
-  };
-}
-
-function renderPageCanvas(doc, page, pageIndex) {
+function renderPageCanvas(doc, slot) {
   const size = getPageSizePx(doc);
   const pageEl = document.createElement("article");
   pageEl.className = "page-canvas";
-  pageEl.dataset.pageId = page.id;
   pageEl.style.width = `${size.width}px`;
   pageEl.style.height = `${size.height}px`;
+
+  if (slot.isVirtualBlank) {
+    pageEl.classList.add("virtual-blank");
+    pageEl.dataset.pageId = "virtual-front-blank";
+
+    const label = document.createElement("span");
+    label.className = "page-label";
+    label.textContent = "Page blanche fictive";
+
+    const note = document.createElement("small");
+    note.className = "blank-note";
+    note.textContent = "Insérée automatiquement pour démarrer en recto (page 1 à droite).";
+    pageEl.append(label, note);
+    return pageEl;
+  }
+
+  const page = slot.page;
+  const pageIndex = doc.pages.findIndex((candidate) => candidate.id === page.id);
+  pageEl.dataset.pageId = page.id;
 
   const label = document.createElement("span");
   label.className = "page-label";
@@ -71,7 +57,7 @@ function renderPageCanvas(doc, page, pageIndex) {
     ? page.frames
     : [
         {
-          id: `${page.id}-fallback` ,
+          id: `${page.id}-fallback`,
           type: "text",
           x: 8,
           y: 14,
@@ -117,41 +103,13 @@ function renderPageCanvas(doc, page, pageIndex) {
     masterOverlay.appendChild(footer);
   }
 
-  if (doc.settings.margins.visible) {
-    const marginOverlay = document.createElement("div");
-    marginOverlay.className = "margin-overlay";
-    const margins = getMarginsPx(doc, pageIndex);
-    const colors = doc.settings.margins.colors;
-    const stroke = doc.settings.margins.stroke || 1;
-    marginOverlay.style.borderWidth = `${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px`;
-    if (colors.mode === "single") {
-      marginOverlay.style.borderColor = colors.all;
-    } else {
-      marginOverlay.style.borderTopColor = colors.top;
-      marginOverlay.style.borderRightColor = colors.outside;
-      marginOverlay.style.borderBottomColor = colors.bottom;
-      marginOverlay.style.borderLeftColor = colors.inside;
-    }
-    marginOverlay.style.borderStyle = "solid";
-    marginOverlay.style.outline = `${stroke}px solid transparent`;
-    pageEl.appendChild(marginOverlay);
-  }
-
-  if (doc.settings.bleedVisible) {
-    const bleedOverlay = document.createElement("div");
-    bleedOverlay.className = "bleed-overlay";
-    const bleedPx = mmToPx(doc.settings.bleed, doc.settings.dpi);
-    bleedOverlay.style.inset = `${-bleedPx}px`;
-    pageEl.appendChild(bleedOverlay);
-  }
-
-  if (doc.settings.safeVisible) {
-    const safe = document.createElement("div");
-    safe.className = "safe-overlay";
-    const safePx = mmToPx(doc.settings.safeArea, doc.settings.dpi);
-    safe.style.inset = `${safePx}px`;
-    pageEl.appendChild(safe);
-  }
+  const marginOverlay = renderMarginOverlay({
+    doc,
+    page,
+    pageSizePx: size,
+    slotInfo: slot
+  });
+  pageEl.appendChild(marginOverlay);
 
   if (doc.grids.guides) {
     const grid = document.createElement("div");
@@ -173,20 +131,19 @@ function renderSpread(store, refs) {
   const spreadViewport = refs.spreadViewport;
   spreadViewport.innerHTML = "";
 
-  const groups = getPageGroups(doc);
-  const index = clamp(view.spreadIndex, 0, Math.max(0, groups.length - 1));
-  const currentGroup = groups[index] || [];
+  const spreads = buildSpreadGroups(doc, { includeVirtualFrontBlank: doc.settings.startOnRight });
+  const index = clamp(view.spreadIndex, 0, Math.max(0, spreads.length - 1));
+  const current = spreads[index] || { slots: [] };
 
   const spread = document.createElement("div");
   spread.className = "spread";
   spread.style.transform = `scale(${view.zoom})`;
 
-  currentGroup.forEach((page) => {
-    const pageIndex = doc.pages.findIndex((candidate) => candidate.id === page.id);
-    spread.appendChild(renderPageCanvas(doc, page, pageIndex));
+  current.slots.forEach((slot) => {
+    spread.appendChild(renderPageCanvas(doc, slot));
   });
 
-  if (!currentGroup.length) {
+  if (!current.slots.length) {
     const empty = document.createElement("p");
     empty.textContent = "Aucune page";
     spread.appendChild(empty);
@@ -194,7 +151,10 @@ function renderSpread(store, refs) {
 
   spreadViewport.appendChild(spread);
 
-  refs.spreadLabel.textContent = doc.settings.spreads ? `Spread ${index + 1}/${groups.length}` : `Page ${index + 1}/${groups.length}`;
+  const spreadMode = spreadModeEnabled(doc);
+  refs.spreadLabel.textContent = spreadMode
+    ? `Spread ${index + 1}/${spreads.length}`
+    : `Page ${index + 1}/${spreads.length}`;
   refs.zoomLabel.textContent = `${Math.round(view.zoom * 100)}%`;
 }
 
@@ -240,15 +200,16 @@ function renderThumbnails(store, refs) {
 
     const meta = document.createElement("small");
     const section = doc.sections.find((entry) => entry.id === page.sectionId);
-    meta.textContent = `${section?.name || "Sans section"} · ${page.masterId}`;
+    const slot = getPageSlotInfo(doc, page.id, { includeVirtualFrontBlank: doc.settings.startOnRight });
+    meta.textContent = `${section?.name || "Sans section"} · ${page.masterId} · ${slot?.side || "single"}`;
 
     item.append(head, mini, meta);
 
     item.addEventListener("click", () => {
       store.commit("select-page", (draft) => {
         draft.view.selectedPageId = page.id;
-        const groupIndex = getPageGroups(draft.document).findIndex((group) => group.some((p) => p.id === page.id));
-        draft.view.spreadIndex = Math.max(0, groupIndex);
+        const slotInfo = getPageSlotInfo(draft.document, page.id, { includeVirtualFrontBlank: draft.document.settings.startOnRight });
+        draft.view.spreadIndex = Math.max(0, slotInfo?.spreadIndex || 0);
       }, { trackHistory: false });
     });
 
@@ -286,8 +247,9 @@ function movePage(store, pageId, targetIndex) {
     const [page] = pages.splice(sourceIndex, 1);
     const nextIndex = clamp(targetIndex, 0, pages.length);
     pages.splice(nextIndex, 0, page);
-    recomputePagination(draft.document);
+    applyBookLayoutRecalculation(draft.document);
   });
+  store.emit("SPREADS_UPDATED", "reorder-page");
 }
 
 export function initPagesModule(store, refs) {
@@ -298,6 +260,8 @@ export function initPagesModule(store, refs) {
 
   store.subscribe("state:changed", render);
   store.subscribe("ui:changed", render);
+  store.subscribe("SPREADS_UPDATED", render);
+  store.subscribe("MARGINS_UPDATED", render);
 
   render();
 
@@ -329,14 +293,24 @@ export function initPagesModule(store, refs) {
 
         pages.splice(insertIndex, 0, page);
         draft.view.selectedPageId = page.id;
-        draft.view.spreadIndex = getPageGroups(draft.document).findIndex((group) => group.some((entry) => entry.id === page.id));
+        applyBookLayoutRecalculation(draft.document);
+        const slot = getPageSlotInfo(draft.document, page.id, { includeVirtualFrontBlank: draft.document.settings.startOnRight });
+        draft.view.spreadIndex = slot?.spreadIndex || 0;
       });
+      store.emit("SPREADS_UPDATED", "add-page");
     },
 
     toggleSpread() {
       store.commit("toggle-spread-mode", (draft) => {
-        draft.document.settings.spreads = !draft.document.settings.spreads;
+        if (draft.document.settings.startOnRight) {
+          draft.document.settings.startOnRight = false;
+          draft.document.settings.spreads = false;
+        } else {
+          draft.document.settings.spreads = !draft.document.settings.spreads;
+        }
+        applyBookLayoutRecalculation(draft.document);
       }, { trackHistory: false });
+      store.emit("SPREADS_UPDATED", "toggle-spread-mode");
     },
 
     prevSpread() {
@@ -347,8 +321,8 @@ export function initPagesModule(store, refs) {
 
     nextSpread() {
       store.commit("next-spread", (draft) => {
-        const groups = getPageGroups(draft.document);
-        draft.view.spreadIndex = Math.min(groups.length - 1, draft.view.spreadIndex + 1);
+        const spreads = buildSpreadGroups(draft.document, { includeVirtualFrontBlank: draft.document.settings.startOnRight });
+        draft.view.spreadIndex = Math.min(spreads.length - 1, draft.view.spreadIndex + 1);
       }, { trackHistory: false });
     },
 
@@ -380,9 +354,9 @@ export function initPagesModule(store, refs) {
     jumpToPage(pageId) {
       store.commit("jump-page", (draft) => {
         draft.view.selectedPageId = pageId;
-        const index = getPageGroups(draft.document).findIndex((group) => group.some((page) => page.id === pageId));
-        if (index >= 0) {
-          draft.view.spreadIndex = index;
+        const slot = getPageSlotInfo(draft.document, pageId, { includeVirtualFrontBlank: draft.document.settings.startOnRight });
+        if (slot) {
+          draft.view.spreadIndex = slot.spreadIndex;
         }
       }, { trackHistory: false });
     }

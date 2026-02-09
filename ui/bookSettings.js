@@ -1,95 +1,290 @@
 import { getFormatDimensions } from "../core/document.js";
 import { hydrateIcons } from "./icons.js";
 
-const marginPresetDefaults = {
-  mode: "single",
-  all: "#c9793b",
-  top: "#c9793b",
-  bottom: "#b86f37",
-  inside: "#9d5c2f",
-  outside: "#d4975f"
-};
+function valueOrFallback(value, fallback = "") {
+  return value ?? fallback;
+}
 
-function buildBookSettingsForm(doc) {
-  const size = getFormatDimensions(doc.settings.format, doc.settings.customSize, doc.settings.orientation);
+function buildBookSettingsForm(draftState, autoApply) {
+  const draft = draftState.current;
+  const size = getFormatDimensions(draft.format, draft.customSize, draft.orientation);
+  const dirtyCount = draftState.dirtyFields.length;
+
+  const userPresets = draft.marginPresets || [];
+
   return `
-    <div class="style-item">
-      <div class="row-between"><strong>Format page</strong><small>${size.width}×${size.height} mm</small></div>
-      <div class="grid-2">
-        <label class="field">Format
-          <select name="format">
-            <option value="A4">A4</option>
-            <option value="A5">A5</option>
-            <option value="Letter">Letter</option>
-            <option value="custom">Custom</option>
-          </select>
-        </label>
-        <label class="field">Orientation
-          <select name="orientation">
-            <option value="portrait">Portrait</option>
-            <option value="landscape">Paysage</option>
-          </select>
-        </label>
-      </div>
-      <div class="grid-2">
-        <label class="field">Largeur (mm)<input type="number" step="0.1" name="customWidth" value="${doc.settings.customSize.width}" /></label>
-        <label class="field">Hauteur (mm)<input type="number" step="0.1" name="customHeight" value="${doc.settings.customSize.height}" /></label>
-      </div>
-      <div class="grid-2">
-        <label class="field">Unités
-          <select name="unit">
-            <option value="mm">mm</option>
-            <option value="pt">pt</option>
-            <option value="in">in</option>
-            <option value="px">px</option>
-          </select>
-        </label>
-        <label class="field">DPI<input type="number" name="dpi" min="72" max="600" value="${doc.settings.dpi}" /></label>
-      </div>
-    </div>
+    <form id="bookSettingsForm" novalidate>
+      <article class="style-item">
+        <div class="book-settings-draft-bar">
+          <span class="pending-badge ${dirtyCount ? "pending" : "clean"}">
+            ${dirtyCount ? `Modifications en attente (${dirtyCount})` : "Aucune modification en attente"}
+          </span>
+          <label class="field"><span><input type="checkbox" name="autoApply" ${autoApply ? "checked" : ""}/> Appliquer automatiquement</span></label>
+          <div class="inline-actions">
+            <button class="tool-btn" data-action="applyDraft" data-tool="save" title="Appliquer les modifications" ${dirtyCount ? "" : "disabled"}></button>
+            <button class="tool-btn" data-action="cancelDraft" data-tool="close" title="Annuler les modifications" ${dirtyCount ? "" : "disabled"}></button>
+          </div>
+        </div>
+      </article>
 
-    <div class="style-item">
-      <div class="row-between"><strong>Marges</strong><small>Overlay non imprimé</small></div>
-      <div class="grid-2">
-        <label class="field">Haut<input type="number" step="0.1" name="marginTop" value="${doc.settings.margins.top}" /></label>
-        <label class="field">Bas<input type="number" step="0.1" name="marginBottom" value="${doc.settings.margins.bottom}" /></label>
-        <label class="field">Intérieur<input type="number" step="0.1" name="marginInside" value="${doc.settings.margins.inside}" /></label>
-        <label class="field">Extérieur<input type="number" step="0.1" name="marginOutside" value="${doc.settings.margins.outside}" /></label>
-        <label class="field">Tranche<input type="number" step="0.1" name="marginSpine" value="${doc.settings.margins.spine}" /></label>
-        <label class="field">Comp. pair/impair<input type="number" step="0.1" name="oddEvenComp" value="${doc.settings.margins.oddEvenCompensation}" /></label>
-      </div>
-      <div class="grid-2">
-        <label class="field">Bleed<input type="number" step="0.1" name="bleed" value="${doc.settings.bleed}" /></label>
-        <label class="field">Safe area<input type="number" step="0.1" name="safeArea" value="${doc.settings.safeArea}" /></label>
-      </div>
-      <div class="grid-3">
-        <label class="field">Mode couleur
-          <select name="marginColorMode">
-            <option value="single">Simple</option>
-            <option value="advanced">Avancé</option>
-          </select>
-        </label>
-        <label class="field">Trait (px)<input type="number" step="1" min="1" max="5" name="marginStroke" value="${doc.settings.margins.stroke || 1}" /></label>
-        <label class="field">Afficher
-          <select name="marginVisible">
-            <option value="true">On</option>
-            <option value="false">Off</option>
-          </select>
-        </label>
-      </div>
-      <div class="grid-3">
-        <label class="field">Couleur unique<input type="color" name="marginColorAll" value="${doc.settings.margins.colors.all}" /></label>
-        <label class="field">Top<input type="color" name="marginColorTop" value="${doc.settings.margins.colors.top}" /></label>
-        <label class="field">Bottom<input type="color" name="marginColorBottom" value="${doc.settings.margins.colors.bottom}" /></label>
-        <label class="field">Inside<input type="color" name="marginColorInside" value="${doc.settings.margins.colors.inside}" /></label>
-        <label class="field">Outside<input type="color" name="marginColorOutside" value="${doc.settings.margins.colors.outside}" /></label>
-      </div>
-      <div class="inline-actions">
-        <button class="tool-btn" data-action="saveMarginPreset" data-tool="save" title="Sauvegarder preset marges"></button>
-        <button class="tool-btn" data-action="applyMarginPreset" data-tool="settings" title="Appliquer preset marges"></button>
-      </div>
-    </div>
+      <article class="style-item">
+        <div class="row-between"><strong>Format & pagination</strong><small>${size.width}×${size.height} mm</small></div>
+        <div class="grid-2">
+          <label class="field">Format
+            <select name="format" data-path="format">
+              <option value="A4">A4</option>
+              <option value="A5">A5</option>
+              <option value="Letter">Letter</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <label class="field">Orientation
+            <select name="orientation" data-path="orientation">
+              <option value="portrait">Portrait</option>
+              <option value="landscape">Paysage</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid-2">
+          <label class="field">Largeur (mm)
+            <input type="number" step="0.1" name="customWidth" data-path="customSize.width" value="${valueOrFallback(draft.customSize.width, 210)}" />
+          </label>
+          <label class="field">Hauteur (mm)
+            <input type="number" step="0.1" name="customHeight" data-path="customSize.height" value="${valueOrFallback(draft.customSize.height, 297)}" />
+          </label>
+        </div>
+        <div class="grid-2">
+          <label class="field">Unités
+            <select name="unit" data-path="unit">
+              <option value="mm">mm</option>
+              <option value="pt">pt</option>
+              <option value="in">in</option>
+              <option value="px">px</option>
+            </select>
+          </label>
+          <label class="field">DPI
+            <input type="number" min="72" max="600" name="dpi" data-path="dpi" value="${valueOrFallback(draft.dpi, 96)}" />
+          </label>
+        </div>
+        <div class="grid-2">
+          <label class="field"><span><input type="checkbox" name="startOnRight" data-path="startOnRight" ${draft.startOnRight ? "checked" : ""}/> Commencer sur page droite (recto)</span></label>
+          <label class="field"><span><input type="checkbox" name="safeVisible" data-path="safeVisible" ${draft.safeVisible ? "checked" : ""}/> Zone safe visible</span></label>
+          <label class="field"><span><input type="checkbox" name="bleedVisible" data-path="bleedVisible" ${draft.bleedVisible ? "checked" : ""}/> Bleed visible</span></label>
+        </div>
+      </article>
+
+      <article class="style-item">
+        <div class="row-between"><strong>Marges & tranche</strong><small>Overlays non imprimés</small></div>
+        <div class="grid-2">
+          <label class="field">Haut<input type="number" step="0.1" name="marginTop" data-path="margins.top" value="${valueOrFallback(draft.margins.top, 15)}" /></label>
+          <label class="field">Bas<input type="number" step="0.1" name="marginBottom" data-path="margins.bottom" value="${valueOrFallback(draft.margins.bottom, 20)}" /></label>
+          <label class="field">Intérieur<input type="number" step="0.1" name="marginInside" data-path="margins.inside" value="${valueOrFallback(draft.margins.inside, 18)}" /></label>
+          <label class="field">Extérieur<input type="number" step="0.1" name="marginOutside" data-path="margins.outside" value="${valueOrFallback(draft.margins.outside, 15)}" /></label>
+          <label class="field">Tranche<input type="number" step="0.1" name="marginSpine" data-path="margins.spine" value="${valueOrFallback(draft.margins.spine, 4)}" /></label>
+          <label class="field">Comp. pair/impair<input type="number" step="0.1" name="oddEvenComp" data-path="margins.oddEvenCompensation" value="${valueOrFallback(draft.margins.oddEvenCompensation, 0)}" /></label>
+          <label class="field">Bleed<input type="number" step="0.1" name="bleed" data-path="bleed" value="${valueOrFallback(draft.bleed, 3)}" /></label>
+          <label class="field">Safe area<input type="number" step="0.1" name="safeArea" data-path="safeArea" value="${valueOrFallback(draft.safeArea, 5)}" /></label>
+        </div>
+      </article>
+
+      <article class="style-item">
+        <div class="row-between"><strong>Système visuel des marges</strong><small>Lisibilité pro</small></div>
+        <div class="grid-3">
+          <label class="field">Preset visuel
+            <select name="marginVisualPreset" data-path="margins.visual.preset">
+              <option value="edition">édition</option>
+              <option value="printPreview">print preview</option>
+              <option value="debug">debug</option>
+            </select>
+          </label>
+          <label class="field">Mode
+            <select name="marginVisualMode" data-path="margins.visual.mode">
+              <option value="simple">Simple</option>
+              <option value="advanced">Avancé</option>
+            </select>
+          </label>
+          <label class="field">Afficher overlays
+            <select name="marginsVisible" data-path="margins.visible">
+              <option value="true">On</option>
+              <option value="false">Off</option>
+            </select>
+          </label>
+          <label class="field">Opacité ${Math.round(Number(draft.margins.visual.opacity || 0.2) * 100)}%
+            <input type="range" min="0.05" max="0.45" step="0.01" name="marginOpacity" data-path="margins.visual.opacity" value="${valueOrFallback(draft.margins.visual.opacity, 0.2)}" />
+          </label>
+          <label class="field">Trait (px)<input type="number" min="1" max="5" step="1" name="marginStroke" data-path="margins.visual.stroke" value="${valueOrFallback(draft.margins.visual.stroke, 1)}" /></label>
+          <label class="field">Style ligne
+            <select name="marginLineStyle" data-path="margins.visual.lineStyle">
+              <option value="solid">Plein</option>
+              <option value="dashed">Pointillé</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="grid-3">
+          <label class="field"><span><input type="checkbox" data-path="margins.visual.show.inside" ${draft.margins.visual.show.inside ? "checked" : ""}/> inside</span></label>
+          <label class="field"><span><input type="checkbox" data-path="margins.visual.show.outside" ${draft.margins.visual.show.outside ? "checked" : ""}/> outside</span></label>
+          <label class="field"><span><input type="checkbox" data-path="margins.visual.show.top" ${draft.margins.visual.show.top ? "checked" : ""}/> top</span></label>
+          <label class="field"><span><input type="checkbox" data-path="margins.visual.show.bottom" ${draft.margins.visual.show.bottom ? "checked" : ""}/> bottom</span></label>
+          <label class="field"><span><input type="checkbox" data-path="margins.visual.show.bleed" ${draft.margins.visual.show.bleed ? "checked" : ""}/> bleed</span></label>
+          <label class="field"><span><input type="checkbox" data-path="margins.visual.show.safe" ${draft.margins.visual.show.safe ? "checked" : ""}/> safe</span></label>
+        </div>
+
+        <div class="grid-3">
+          <label class="field">Couleur unique<input type="color" data-path="margins.visual.colors.all" value="${valueOrFallback(draft.margins.visual.colors.all, "#c9793b")}" /></label>
+          <label class="field">Top<input type="color" data-path="margins.visual.colors.top" value="${valueOrFallback(draft.margins.visual.colors.top, "#c9793b")}" /></label>
+          <label class="field">Bottom<input type="color" data-path="margins.visual.colors.bottom" value="${valueOrFallback(draft.margins.visual.colors.bottom, "#b86f37")}" /></label>
+          <label class="field">Inside<input type="color" data-path="margins.visual.colors.inside" value="${valueOrFallback(draft.margins.visual.colors.inside, "#9d5c2f")}" /></label>
+          <label class="field">Outside<input type="color" data-path="margins.visual.colors.outside" value="${valueOrFallback(draft.margins.visual.colors.outside, "#d4975f")}" /></label>
+          <label class="field">Bleed<input type="color" data-path="margins.visual.colors.bleed" value="${valueOrFallback(draft.margins.visual.colors.bleed, "#b96767")}" /></label>
+          <label class="field">Safe<input type="color" data-path="margins.visual.colors.safe" value="${valueOrFallback(draft.margins.visual.colors.safe, "#4f8d6f")}" /></label>
+        </div>
+
+        <div class="inline-actions">
+          <button class="tool-btn" data-action="applyVisualPreset" data-tool="settings" title="Appliquer preset visuel"></button>
+          <button class="tool-btn" data-action="saveMarginPreset" data-tool="save" title="Sauvegarder preset utilisateur"></button>
+          <label class="field" style="min-width:180px;">Preset utilisateur
+            <select name="userMarginPreset">
+              ${userPresets.length ? userPresets.map((preset, index) => `<option value="${index}">${preset.name}</option>`).join("") : "<option value=\"\">Aucun</option>"}
+            </select>
+          </label>
+          <button class="tool-btn" data-action="loadMarginPreset" data-tool="bookSettings" title="Charger preset utilisateur" ${userPresets.length ? "" : "disabled"}></button>
+        </div>
+      </article>
+    </form>
   `;
+}
+
+function markDirtyFields(form, dirtyFields) {
+  const dirtySet = new Set(dirtyFields);
+  form.querySelectorAll("[data-path]").forEach((field) => {
+    const path = field.dataset.path;
+    const isDirty = dirtySet.has(path);
+    field.classList.toggle("dirty-field", isDirty);
+    const wrapper = field.closest(".field");
+    if (wrapper) {
+      wrapper.classList.toggle("field-dirty", isDirty);
+    }
+  });
+}
+
+function bindDraftInteractions(store, draftController, container, draftState) {
+  const form = container.querySelector("#bookSettingsForm");
+  if (!form) {
+    return;
+  }
+
+  const draft = draftState.current;
+  form.format.value = draft.format;
+  form.orientation.value = draft.orientation;
+  form.unit.value = draft.unit;
+  form.marginVisualPreset.value = draft.margins.visual.preset || "edition";
+  form.marginVisualMode.value = draft.margins.visual.mode || "simple";
+  form.marginsVisible.value = String(draft.margins.visible);
+  form.marginLineStyle.value = draft.margins.visual.lineStyle || "solid";
+
+  const applyInputChange = (field) => {
+    const path = field.dataset.path;
+    if (!path) {
+      return;
+    }
+
+    let nextValue;
+    if (field.type === "checkbox") {
+      nextValue = field.checked;
+    } else if (field.type === "number" || field.type === "range") {
+      nextValue = Number(field.value);
+    } else if (field.tagName === "SELECT" && field.name === "marginsVisible") {
+      nextValue = field.value === "true";
+    } else {
+      nextValue = field.value;
+    }
+
+    draftController.updateField(path, nextValue);
+  };
+
+  form.querySelectorAll("[data-path]").forEach((field) => {
+    const evt = field.type === "range" ? "input" : "change";
+    field.addEventListener(evt, () => applyInputChange(field));
+  });
+
+  form.autoApply.addEventListener("change", () => {
+    draftController.setAutoApply(form.autoApply.checked);
+  });
+
+  form.querySelector('[data-action="applyDraft"]').addEventListener("click", (event) => {
+    event.preventDefault();
+    draftController.apply();
+  });
+
+  form.querySelector('[data-action="cancelDraft"]').addEventListener("click", (event) => {
+    event.preventDefault();
+    draftController.cancel();
+  });
+
+  form.querySelector('[data-action="applyVisualPreset"]').addEventListener("click", (event) => {
+    event.preventDefault();
+    draftController.updateField("margins.visual.preset", form.marginVisualPreset.value);
+  });
+
+  form.querySelector('[data-action="saveMarginPreset"]').addEventListener("click", (event) => {
+    event.preventDefault();
+    const current = draftController.getDraftState().current;
+    const presets = current.marginPresets || [];
+    const nextPreset = {
+      name: `Preset ${presets.length + 1}`,
+      margins: structuredClone(current.margins),
+      bleed: current.bleed,
+      safeArea: current.safeArea,
+      bleedVisible: current.bleedVisible,
+      safeVisible: current.safeVisible
+    };
+    draftController.updateField("marginPresets", [...presets, nextPreset]);
+  });
+
+  form.querySelector('[data-action="loadMarginPreset"]').addEventListener("click", (event) => {
+    event.preventDefault();
+    const current = draftController.getDraftState().current;
+    const presetIndex = Number(form.userMarginPreset.value || -1);
+    const preset = current.marginPresets?.[presetIndex];
+    if (!preset) {
+      return;
+    }
+    draftController.updateField("margins", structuredClone(preset.margins));
+    draftController.updateField("bleed", Number(preset.bleed));
+    draftController.updateField("safeArea", Number(preset.safeArea));
+    draftController.updateField("bleedVisible", Boolean(preset.bleedVisible));
+    draftController.updateField("safeVisible", Boolean(preset.safeVisible));
+  });
+
+  markDirtyFields(form, draftState.dirtyFields);
+}
+
+export function initBookSettingsModule(store, refs, draftController) {
+  const container = refs.bookSettingsPanel;
+
+  const render = () => {
+    const draftState = draftController.getDraftState();
+    const autoApply = Boolean(store.getState().ui.bookSettingsAutoApply);
+
+    container.innerHTML = buildBookSettingsForm(draftState, autoApply);
+    bindDraftInteractions(store, draftController, container, draftState);
+    hydrateIcons(container);
+  };
+
+  store.subscribe("BOOK_SETTINGS_DIRTY", render);
+  store.subscribe("BOOK_SETTINGS_APPLY", render);
+  store.subscribe("BOOK_SETTINGS_CANCEL", render);
+  store.subscribe("state:changed", ({ reason }) => {
+    if (String(reason).startsWith("undo:") || String(reason).startsWith("redo:")) {
+      draftController.syncFromDocument(true);
+    }
+    render();
+  });
+  store.subscribe("ui:changed", render);
+
+  draftController.syncFromDocument(true);
+  render();
 }
 
 function buildGridForm(doc) {
@@ -117,95 +312,6 @@ function buildGridForm(doc) {
       </div>
     </div>
   `;
-}
-
-export function initBookSettingsModule(store, refs) {
-  const container = refs.bookSettingsPanel;
-
-  function render() {
-    const { document: doc } = store.getState();
-    const colors = { ...marginPresetDefaults, ...doc.settings.margins.colors };
-    doc.settings.margins.colors = colors;
-
-    container.innerHTML = `<form id="bookSettingsForm">${buildBookSettingsForm(doc)}</form>`;
-    const form = container.querySelector("#bookSettingsForm");
-
-    form.format.value = doc.settings.format;
-    form.orientation.value = doc.settings.orientation;
-    form.unit.value = doc.settings.unit;
-    form.marginColorMode.value = doc.settings.margins.colors.mode;
-    form.marginVisible.value = String(doc.settings.margins.visible);
-
-    const sync = () => {
-      store.commit("book-settings", (draft) => {
-        const settings = draft.document.settings;
-        settings.format = form.format.value;
-        settings.orientation = form.orientation.value;
-        settings.customSize.width = Number(form.customWidth.value || settings.customSize.width);
-        settings.customSize.height = Number(form.customHeight.value || settings.customSize.height);
-        settings.unit = form.unit.value;
-        settings.dpi = Number(form.dpi.value || settings.dpi);
-
-        settings.margins.top = Number(form.marginTop.value || settings.margins.top);
-        settings.margins.bottom = Number(form.marginBottom.value || settings.margins.bottom);
-        settings.margins.inside = Number(form.marginInside.value || settings.margins.inside);
-        settings.margins.outside = Number(form.marginOutside.value || settings.margins.outside);
-        settings.margins.spine = Number(form.marginSpine.value || settings.margins.spine);
-        settings.margins.oddEvenCompensation = Number(form.oddEvenComp.value || 0);
-        settings.margins.stroke = Number(form.marginStroke.value || 1);
-        settings.margins.visible = form.marginVisible.value === "true";
-
-        settings.margins.colors.mode = form.marginColorMode.value;
-        settings.margins.colors.all = form.marginColorAll.value;
-        settings.margins.colors.top = form.marginColorTop.value;
-        settings.margins.colors.bottom = form.marginColorBottom.value;
-        settings.margins.colors.inside = form.marginColorInside.value;
-        settings.margins.colors.outside = form.marginColorOutside.value;
-
-        settings.bleed = Number(form.bleed.value || settings.bleed);
-        settings.safeArea = Number(form.safeArea.value || settings.safeArea);
-      }, { trackHistory: false });
-    };
-
-    form.querySelectorAll("input,select").forEach((input) => {
-      input.addEventListener("change", sync);
-    });
-
-    const savePreset = form.querySelector('[data-action="saveMarginPreset"]');
-    savePreset.addEventListener("click", (event) => {
-      event.preventDefault();
-      store.commit("save-margin-preset", (draft) => {
-        if (!draft.document.settings.marginPresets) {
-          draft.document.settings.marginPresets = [];
-        }
-        draft.document.settings.marginPresets.push({
-          name: `Preset ${draft.document.settings.marginPresets.length + 1}`,
-          margins: structuredClone(draft.document.settings.margins),
-          bleed: draft.document.settings.bleed,
-          safeArea: draft.document.settings.safeArea
-        });
-      }, { trackHistory: false });
-    });
-
-    const applyPreset = form.querySelector('[data-action="applyMarginPreset"]');
-    applyPreset.addEventListener("click", (event) => {
-      event.preventDefault();
-      store.commit("apply-margin-preset", (draft) => {
-        const preset = draft.document.settings.marginPresets?.at(-1);
-        if (!preset) {
-          return;
-        }
-        draft.document.settings.margins = structuredClone(preset.margins);
-        draft.document.settings.bleed = preset.bleed;
-        draft.document.settings.safeArea = preset.safeArea;
-      }, { trackHistory: false });
-    });
-
-    hydrateIcons(container);
-  }
-
-  store.subscribe("state:changed", render);
-  render();
 }
 
 export function initGridPanelModule(store, refs) {

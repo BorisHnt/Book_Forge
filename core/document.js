@@ -24,6 +24,32 @@ const DEFAULT_STYLES = {
   ]
 };
 
+const DEFAULT_MARGIN_VISUAL = {
+  preset: "edition",
+  mode: "simple",
+  opacity: 0.2,
+  stroke: 1,
+  lineStyle: "solid",
+  legend: true,
+  colors: {
+    all: "#c9793b",
+    top: "#c9793b",
+    bottom: "#b86f37",
+    inside: "#9d5c2f",
+    outside: "#d4975f",
+    bleed: "#b96767",
+    safe: "#4f8d6f"
+  },
+  show: {
+    inside: true,
+    outside: true,
+    top: true,
+    bottom: true,
+    bleed: true,
+    safe: true
+  }
+};
+
 function uid(prefix) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}-${Date.now().toString(36)}`;
 }
@@ -100,7 +126,8 @@ export function createDefaultDocument() {
       customSize: { width: 210, height: 297 },
       unit: "mm",
       dpi: 96,
-      spreads: true,
+      startOnRight: false,
+      spreads: false,
       margins: {
         top: 15,
         bottom: 20,
@@ -114,8 +141,11 @@ export function createDefaultDocument() {
           top: "#c9793b",
           bottom: "#b86f37",
           inside: "#9d5c2f",
-          outside: "#d4975f"
+          outside: "#d4975f",
+          bleed: "#b96767",
+          safe: "#4f8d6f"
         },
+        visual: structuredClone(DEFAULT_MARGIN_VISUAL),
         stroke: 1,
         visible: true
       },
@@ -192,7 +222,20 @@ export function normalizeDocument(doc) {
         colors: {
           ...fresh.settings.margins.colors,
           ...(doc.settings?.margins?.colors || {})
-        }
+        },
+        visual: {
+          ...DEFAULT_MARGIN_VISUAL,
+          ...(doc.settings?.margins?.visual || {}),
+          colors: {
+            ...DEFAULT_MARGIN_VISUAL.colors,
+            ...(doc.settings?.margins?.colors || {}),
+            ...(doc.settings?.margins?.visual?.colors || {})
+          },
+          show: {
+            ...DEFAULT_MARGIN_VISUAL.show,
+            ...(doc.settings?.margins?.visual?.show || {})
+          }
+        },
       },
       preview: {
         ...fresh.settings.preview,
