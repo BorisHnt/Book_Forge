@@ -6,6 +6,7 @@ import {
   spreadModeEnabled
 } from "./spreadEngine.js";
 import { renderPageSlot } from "./pageRenderer.js";
+import { renderPageList } from "../ui/pageList.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -44,87 +45,6 @@ function renderSpread(store, refs) {
   refs.zoomLabel.textContent = `${Math.round(view.zoom * 100)}%`;
 }
 
-function renderThumbnails(store, refs) {
-  const state = store.getState();
-  const { document: doc, view } = state;
-  const target = refs.pagesList;
-  target.innerHTML = "";
-
-  doc.pages.forEach((page, pageIndex) => {
-    const item = document.createElement("article");
-    item.className = "thumb-item";
-    item.draggable = true;
-    item.dataset.pageId = page.id;
-    item.classList.toggle("active", page.id === view.selectedPageId);
-
-    const head = document.createElement("div");
-    head.className = "thumb-head";
-
-    const title = document.createElement("strong");
-    title.textContent = `${page.name} (${page.displayNumber || page.autoNumber})`;
-
-    const actions = document.createElement("div");
-    actions.className = "inline-actions";
-
-    const moveLeft = document.createElement("button");
-    moveLeft.className = "tool-btn compact";
-    moveLeft.dataset.tool = "chevronLeft";
-    moveLeft.title = "Déplacer avant";
-    moveLeft.addEventListener("click", () => movePage(store, page.id, pageIndex - 1));
-
-    const moveRight = document.createElement("button");
-    moveRight.className = "tool-btn compact";
-    moveRight.dataset.tool = "chevronRight";
-    moveRight.title = "Déplacer après";
-    moveRight.addEventListener("click", () => movePage(store, page.id, pageIndex + 1));
-
-    actions.append(moveLeft, moveRight);
-    head.append(title, actions);
-
-    const mini = document.createElement("div");
-    mini.className = "thumb-mini";
-
-    const meta = document.createElement("small");
-    const section = doc.sections.find((entry) => entry.id === page.sectionId);
-    const slot = getPageSlotInfo(doc, page.id, { includeVirtualFrontBlank: doc.settings.startOnRight });
-    meta.textContent = `${section?.name || "Sans section"} · ${page.masterId} · ${slot?.side || "single"}`;
-
-    item.append(head, mini, meta);
-
-    item.addEventListener("click", () => {
-      store.commit("select-page", (draft) => {
-        draft.view.selectedPageId = page.id;
-        draft.view.selectedFrameId = null;
-        draft.view.selectedFramePageId = null;
-        const slotInfo = getPageSlotInfo(draft.document, page.id, { includeVirtualFrontBlank: draft.document.settings.startOnRight });
-        draft.view.spreadIndex = Math.max(0, slotInfo?.spreadIndex || 0);
-      }, { trackHistory: false });
-    });
-
-    item.addEventListener("dragstart", (event) => {
-      event.dataTransfer.setData("text/plain", page.id);
-    });
-
-    item.addEventListener("dragover", (event) => {
-      event.preventDefault();
-      item.classList.add("active");
-    });
-
-    item.addEventListener("dragleave", () => item.classList.remove("active"));
-    item.addEventListener("drop", (event) => {
-      event.preventDefault();
-      item.classList.remove("active");
-      const draggedPageId = event.dataTransfer.getData("text/plain");
-      if (!draggedPageId || draggedPageId === page.id) {
-        return;
-      }
-      movePage(store, draggedPageId, pageIndex);
-    });
-
-    target.appendChild(item);
-  });
-}
-
 function movePage(store, pageId, targetIndex) {
   store.commit("reorder-page", (draft) => {
     const pages = draft.document.pages;
@@ -140,9 +60,25 @@ function movePage(store, pageId, targetIndex) {
   store.emit("SPREADS_UPDATED", "reorder-page");
 }
 
-export function initPagesModule(store, refs) {
+function selectPage(store, pageId) {
+  store.commit("select-page", (draft) => {
+    draft.view.selectedPageId = pageId;
+    draft.view.selectedFrameId = null;
+    draft.view.selectedFramePageId = null;
+    const slot = getPageSlotInfo(draft.document, pageId, { includeVirtualFrontBlank: draft.document.settings.startOnRight });
+    draft.view.spreadIndex = Math.max(0, slot?.spreadIndex || 0);
+  }, { trackHistory: false });
+}
+
+export function initPagesModule(store, refs, pageManager) {
   function render() {
-    renderThumbnails(store, refs);
+    renderPageList({
+      store,
+      pageManager,
+      container: refs.pagesList,
+      onMovePage: (pageId, targetIndex) => movePage(store, pageId, targetIndex),
+      onSelectPage: (pageId) => selectPage(store, pageId)
+    });
     renderSpread(store, refs);
   }
 
@@ -151,6 +87,7 @@ export function initPagesModule(store, refs) {
   store.subscribe("SPREADS_UPDATED", render);
   store.subscribe("MARGINS_UPDATED", render);
   store.subscribe("PAGE_REBUILT", render);
+  store.subscribe("PAGE_DELETED", render);
 
   render();
 
@@ -183,6 +120,7 @@ export function initPagesModule(store, refs) {
 
         pages.splice(insertIndex, 0, page);
         draft.view.selectedPageId = page.id;
+        draft.view.pageSelectionIds = [page.id];
         draft.view.selectedFrameId = null;
         draft.view.selectedFramePageId = null;
         applyBookLayoutRecalculation(draft.document);
@@ -190,6 +128,10 @@ export function initPagesModule(store, refs) {
         draft.view.spreadIndex = slot?.spreadIndex || 0;
       });
       store.emit("SPREADS_UPDATED", "add-page");
+    },
+
+    deleteSelectedPages() {
+      pageManager.requestDelete(pageManager.getSelection());
     },
 
     toggleSpread() {
@@ -244,15 +186,7 @@ export function initPagesModule(store, refs) {
     },
 
     jumpToPage(pageId) {
-      store.commit("jump-page", (draft) => {
-        draft.view.selectedPageId = pageId;
-        draft.view.selectedFrameId = null;
-        draft.view.selectedFramePageId = null;
-        const slot = getPageSlotInfo(draft.document, pageId, { includeVirtualFrontBlank: draft.document.settings.startOnRight });
-        if (slot) {
-          draft.view.spreadIndex = slot.spreadIndex;
-        }
-      }, { trackHistory: false });
+      selectPage(store, pageId);
     }
   };
 }

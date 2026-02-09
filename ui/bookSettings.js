@@ -9,6 +9,8 @@ function buildBookSettingsForm(draftState, autoApply) {
   const draft = draftState.current;
   const size = getFormatDimensions(draft.format, draft.customSize, draft.orientation);
   const dirtyCount = draftState.dirtyFields.length;
+  const customFormatActive = Boolean(draftState.meta?.customFormatActive);
+  const lastPreset = draftState.meta?.lastPreset || "A4";
 
   const userPresets = draft.marginPresets || [];
 
@@ -28,13 +30,24 @@ function buildBookSettingsForm(draftState, autoApply) {
       </article>
 
       <article class="style-item">
-        <div class="row-between"><strong>Format & pagination</strong><small>${size.width}×${size.height} mm</small></div>
+        <div class="row-between">
+          <strong>Format & pagination</strong>
+          <small>${size.width}×${size.height} mm</small>
+        </div>
+        <div class="row-between">
+          <span class="status-pill ${customFormatActive ? "warning" : "ok"}">
+            ${customFormatActive ? "format personnalisé" : `preset: ${draft.format}`}
+          </span>
+          <small>preset mémorisé: ${lastPreset}</small>
+        </div>
         <div class="grid-2">
           <label class="field">Format
             <select name="format" data-path="format">
               <option value="A4">A4</option>
               <option value="A5">A5</option>
               <option value="Letter">Letter</option>
+              <option value="Square">Square</option>
+              <option value="Digest">Digest</option>
               <option value="custom">Custom</option>
             </select>
           </label>
@@ -204,7 +217,9 @@ function bindDraftInteractions(store, draftController, container, draftState) {
   };
 
   form.querySelectorAll("[data-path]").forEach((field) => {
-    const evt = field.type === "range" ? "input" : "change";
+    const liveNumber =
+      field.dataset.path === "customSize.width" || field.dataset.path === "customSize.height";
+    const evt = field.type === "range" || liveNumber ? "input" : "change";
     field.addEventListener(evt, () => applyInputChange(field));
   });
 

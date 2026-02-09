@@ -28,6 +28,7 @@ export class Store {
       },
       view: {
         selectedPageId: null,
+        pageSelectionIds: [],
         selectedFrameId: null,
         selectedFramePageId: null,
         spreadIndex: 0,

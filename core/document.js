@@ -1,7 +1,9 @@
-const FORMAT_DIMENSIONS_MM = {
+export const PAGE_FORMAT_PRESETS_MM = {
   A4: { width: 210, height: 297 },
   A5: { width: 148, height: 210 },
-  Letter: { width: 216, height: 279 }
+  Letter: { width: 216, height: 279 },
+  Square: { width: 210, height: 210 },
+  Digest: { width: 140, height: 216 }
 };
 
 const DEFAULT_STYLES = {
@@ -86,11 +88,28 @@ export function romanize(input) {
 }
 
 export function getFormatDimensions(format, custom, orientation) {
-  const base = FORMAT_DIMENSIONS_MM[format] || custom || FORMAT_DIMENSIONS_MM.A4;
+  const base = PAGE_FORMAT_PRESETS_MM[format] || custom || PAGE_FORMAT_PRESETS_MM.A4;
   if (orientation === "landscape") {
     return { width: base.height, height: base.width };
   }
   return { width: base.width, height: base.height };
+}
+
+export function matchFormatPresetBySize({ width, height, orientation = "portrait", toleranceMm = 0.1 }) {
+  const w = Number(width);
+  const h = Number(height);
+  if (!Number.isFinite(w) || !Number.isFinite(h)) {
+    return null;
+  }
+
+  const presets = Object.keys(PAGE_FORMAT_PRESETS_MM);
+  for (const name of presets) {
+    const dims = getFormatDimensions(name, null, orientation);
+    if (Math.abs(dims.width - w) <= toleranceMm && Math.abs(dims.height - h) <= toleranceMm) {
+      return name;
+    }
+  }
+  return null;
 }
 
 export function createPage({ sectionId, number, masterId = "master-default", frames = [] } = {}) {
@@ -312,11 +331,17 @@ export function findPage(doc, pageId) {
 export function ensureSelectedPageId(state) {
   if (!state.view.selectedPageId) {
     state.view.selectedPageId = state.document.pages[0]?.id || null;
+    state.view.pageSelectionIds = state.view.selectedPageId ? [state.view.selectedPageId] : [];
     return;
   }
   const found = state.document.pages.some((page) => page.id === state.view.selectedPageId);
   if (!found) {
     state.view.selectedPageId = state.document.pages[0]?.id || null;
+    state.view.pageSelectionIds = state.view.selectedPageId ? [state.view.selectedPageId] : [];
+    return;
+  }
+  if (!Array.isArray(state.view.pageSelectionIds) || !state.view.pageSelectionIds.length) {
+    state.view.pageSelectionIds = state.view.selectedPageId ? [state.view.selectedPageId] : [];
   }
 }
 

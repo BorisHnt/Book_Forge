@@ -199,10 +199,12 @@ export function initExportChecklistModule(store, refs) {
   const exportPanel = refs.exportPanel;
   let latestChecks = [];
   let blockOnErrors = true;
+  let invalidated = false;
 
   function run() {
     const { document: doc } = store.getState();
     latestChecks = collectChecks(doc);
+    invalidated = false;
     render();
   }
 
@@ -228,7 +230,9 @@ export function initExportChecklistModule(store, refs) {
     const container = mount.querySelector("#checklistItems");
     if (!latestChecks.length) {
       const placeholder = document.createElement("small");
-      placeholder.textContent = "Aucune analyse lancée.";
+      placeholder.textContent = invalidated
+        ? "Checklist invalidée: relancer l'analyse après modifications."
+        : "Aucune analyse lancée.";
       container.appendChild(placeholder);
     }
 
@@ -287,6 +291,12 @@ export function initExportChecklistModule(store, refs) {
     } else {
       render();
     }
+  });
+
+  store.subscribe("PAGE_DELETED", () => {
+    latestChecks = [];
+    invalidated = true;
+    render();
   });
 
   render();

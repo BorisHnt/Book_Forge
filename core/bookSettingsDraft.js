@@ -1,5 +1,6 @@
 import { applyBookLayoutRecalculation } from "../layout/spreadEngine.js";
 import { applyMarginVisualPreset, ensureMarginVisualConfig } from "../layout/marginOverlay.js";
+import { getFormatDimensions, matchFormatPresetBySize, PAGE_FORMAT_PRESETS_MM } from "./document.js";
 
 function clone(value) {
   return structuredClone(value);
@@ -74,12 +75,18 @@ export function createBookSettingsSnapshot(doc) {
 
 export function createDraftStateFromDocument(doc) {
   const base = createBookSettingsSnapshot(doc);
-  return {
+  const draft = {
     base,
     current: clone(base),
+    meta: {
+      lastPreset: base.format && base.format !== "custom" ? base.format : "A4",
+      customFormatActive: base.format === "custom"
+    },
     dirty: false,
     dirtyFields: []
   };
+  normalizeFormatDraft(draft, "sync");
+  return draft;
 }
 
 export function applyBookSettingsSnapshot(doc, snapshot) {
@@ -87,7 +94,11 @@ export function applyBookSettingsSnapshot(doc, snapshot) {
 
   settings.format = snapshot.format;
   settings.orientation = snapshot.orientation;
-  settings.customSize = clone(snapshot.customSize);
+  settings.customSize = clone(
+    snapshot.format && snapshot.format !== "custom"
+      ? getFormatDimensions(snapshot.format, snapshot.customSize, snapshot.orientation)
+      : snapshot.customSize
+  );
   settings.unit = snapshot.unit;
   settings.dpi = Number(snapshot.dpi);
   settings.startOnRight = Boolean(snapshot.startOnRight);
@@ -112,6 +123,68 @@ export function applyBookSettingsSnapshot(doc, snapshot) {
 function refreshDraftFlags(draft) {
   draft.dirtyFields = collectDiffPaths(draft.base, draft.current).filter(Boolean);
   draft.dirty = draft.dirtyFields.length > 0;
+}
+
+function ensureFormatMeta(draft) {
+  draft.meta = draft.meta || {};
+  if (!draft.meta.lastPreset) {
+    draft.meta.lastPreset =
+      draft.current.format && draft.current.format !== "custom" ? draft.current.format : "A4";
+  }
+  if (typeof draft.meta.customFormatActive !== "boolean") {
+    draft.meta.customFormatActive = draft.current.format === "custom";
+  }
+}
+
+function normalizeFormatDraft(draft, changedPath) {
+  ensureFormatMeta(draft);
+  const current = draft.current;
+  const knownPresets = Object.keys(PAGE_FORMAT_PRESETS_MM);
+
+  if (changedPath === "format") {
+    if (current.format && current.format !== "custom" && knownPresets.includes(current.format)) {
+      draft.meta.lastPreset = current.format;
+      current.customSize = clone(getFormatDimensions(current.format, current.customSize, current.orientation));
+      draft.meta.customFormatActive = false;
+      return;
+    }
+  }
+
+  if (changedPath === "orientation" && current.format && current.format !== "custom" && knownPresets.includes(current.format)) {
+    current.customSize = clone(getFormatDimensions(current.format, current.customSize, current.orientation));
+  }
+
+  const matchedPreset = matchFormatPresetBySize({
+    width: current.customSize?.width,
+    height: current.customSize?.height,
+    orientation: current.orientation,
+    toleranceMm: 0.1
+  });
+
+  const sizeEdited = changedPath === "customSize.width" || changedPath === "customSize.height";
+  if (sizeEdited) {
+    if (matchedPreset) {
+      current.format = matchedPreset;
+      draft.meta.lastPreset = matchedPreset;
+      draft.meta.customFormatActive = false;
+      return;
+    }
+    if (current.format !== "custom") {
+      draft.meta.lastPreset = current.format;
+    }
+    current.format = "custom";
+    draft.meta.customFormatActive = true;
+    return;
+  }
+
+  if ((changedPath === "format" || changedPath === "orientation") && current.format === "custom" && matchedPreset) {
+    current.format = matchedPreset;
+    draft.meta.lastPreset = matchedPreset;
+    draft.meta.customFormatActive = false;
+    return;
+  }
+
+  draft.meta.customFormatActive = current.format === "custom";
 }
 
 function ensureDraftInStore(store) {
@@ -147,6 +220,8 @@ export function createBookSettingsDraftController(store) {
         value
       );
     }
+
+    normalizeFormatDraft(draft, path);
 
     refreshDraftFlags(draft);
     store.emit("BOOK_SETTINGS_DIRTY", `draft:${path}`);

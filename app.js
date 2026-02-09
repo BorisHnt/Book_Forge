@@ -11,6 +11,8 @@ import { initExportChecklistModule } from "./ui/exportChecklist.js";
 import { initPdfExporter } from "./exporters/pdf.js";
 import { initMultiPageImporter } from "./importers/multiPageImporter.js";
 import { createBookSettingsDraftController } from "./core/bookSettingsDraft.js";
+import { createPageManager } from "./core/pageManager.js";
+import { initDeletePageDialog } from "./ui/deletePageDialog.js";
 
 const THEME_KEY = "book-forge.theme.v1";
 
@@ -82,13 +84,23 @@ async function bootstrap() {
   const store = new Store();
   const panels = initPanels(store);
   const draftController = createBookSettingsDraftController(store);
-
-  const pagesApi = initPagesModule(store, {
-    pagesList: document.getElementById("pagesList"),
-    spreadViewport: document.getElementById("spreadViewport"),
-    spreadLabel: document.getElementById("spreadLabel"),
-    zoomLabel: document.getElementById("zoomLabel")
+  const pageManager = createPageManager(store);
+  initDeletePageDialog({
+    store,
+    pageManager,
+    modalRoot: document.getElementById("modalRoot")
   });
+
+  const pagesApi = initPagesModule(
+    store,
+    {
+      pagesList: document.getElementById("pagesList"),
+      spreadViewport: document.getElementById("spreadViewport"),
+      spreadLabel: document.getElementById("spreadLabel"),
+      zoomLabel: document.getElementById("zoomLabel")
+    },
+    pageManager
+  );
 
   const sectionsApi = initSectionsModule(store, {
     sectionsList: document.getElementById("sectionsList")
@@ -162,10 +174,20 @@ async function bootstrap() {
     setStatus("Brouillon paramètres annulé");
   });
 
+  store.subscribe("PAGE_DELETED", ({ reason }) => {
+    const count = Array.isArray(reason?.pageIds) ? reason.pageIds.length : 1;
+    setStatus(`${count} page(s) supprimée(s)`);
+  });
+
+  store.subscribe("PAGE_DELETE_CANCEL", () => {
+    setStatus("Suppression de page annulée");
+  });
+
   const actions = {
     undo: () => store.undo(),
     redo: () => store.redo(),
     addPage: () => pagesApi.addPage(),
+    deleteSelectedPages: () => pagesApi.deleteSelectedPages(),
     toggleSpread: () => pagesApi.toggleSpread(),
     prevSpread: () => pagesApi.prevSpread(),
     nextSpread: () => pagesApi.nextSpread(),
@@ -287,6 +309,13 @@ async function bootstrap() {
       }
       if (key === "n") {
         actions.addPage();
+      }
+      if (key === "delete" || key === "backspace") {
+        const inInput = /INPUT|TEXTAREA|SELECT/.test(event.target?.tagName || "");
+        if (!inInput) {
+          event.preventDefault();
+          actions.deleteSelectedPages();
+        }
       }
     }
   });
