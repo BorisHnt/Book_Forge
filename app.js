@@ -13,6 +13,7 @@ import { initMultiPageImporter } from "./importers/multiPageImporter.js";
 import { createBookSettingsDraftController } from "./core/bookSettingsDraft.js";
 import { createPageManager } from "./core/pageManager.js";
 import { initDeletePageDialog } from "./ui/deletePageDialog.js";
+import { initPageContextMenu } from "./ui/pageContextMenu.js";
 import { createPage } from "./core/document.js";
 import { applyBookLayoutRecalculation } from "./layout/spreadEngine.js";
 
@@ -173,6 +174,11 @@ async function bootstrap() {
     },
     pageManager
   );
+  initPageContextMenu({
+    store,
+    pageManager,
+    viewport: document.getElementById("spreadViewport")
+  });
 
   const sectionsApi = initSectionsModule(store, {
     sectionsList: document.getElementById("sectionsList")

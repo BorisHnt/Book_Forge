@@ -31,6 +31,7 @@ const APP_ASSETS = [
   "./ui/icons.js",
   "./ui/bookSettings.js",
   "./ui/pageList.js",
+  "./ui/pageContextMenu.js",
   "./ui/deletePageDialog.js",
   "./ui/printPreview.js",
   "./ui/exportChecklist.js",
