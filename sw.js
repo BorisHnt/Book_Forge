@@ -1,4 +1,5 @@
-const CACHE_NAME = "book-forge-v1";
+const CACHE_PREFIX = "book-forge-";
+const CACHE_NAME = `${CACHE_PREFIX}v1`;
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -8,6 +9,9 @@ const APP_ASSETS = [
   "./manifest.webmanifest",
   "./sw.js",
   "./assets/icons/tabler-sprite.svg",
+  "./assets/vendor/pdfjs/pdf.min.mjs",
+  "./assets/vendor/pdfjs/pdf.worker.min.mjs",
+  "./assets/vendor/pdfjs/LICENSE",
   "./core/document.js",
   "./core/bookSettingsDraft.js",
   "./core/pageManager.js",
@@ -36,6 +40,13 @@ const APP_ASSETS = [
   "./importers/docxImporter.js",
   "./exporters/pdf.js"
 ];
+const APP_ASSET_URLS = new Set(
+  APP_ASSETS.map((asset) => new URL(asset, self.location.href).href)
+);
+
+function isAppAssetRequest(request) {
+  return APP_ASSET_URLS.has(new URL(request.url).href);
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -46,11 +57,20 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
+      Promise.all([
+        ...keys
+          .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+          .map((key) => caches.delete(key)),
+        caches.open(CACHE_NAME).then((cache) =>
+          cache.keys().then((requests) =>
+            Promise.all(
+              requests
+                .filter((request) => !isAppAssetRequest(request))
+                .map((request) => cache.delete(request))
+            )
+          )
+        )
+      ])
     )
   );
   self.clients.claim();
@@ -58,6 +78,15 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") {
+    return;
+  }
+
+  if (!isAppAssetRequest(event.request)) {
+    if (event.request.mode === "navigate") {
+      event.respondWith(
+        fetch(event.request).catch(() => caches.match("./index.html"))
+      );
+    }
     return;
   }
 
@@ -69,8 +98,10 @@ self.addEventListener("fetch", (event) => {
 
       return fetch(event.request)
         .then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
           return response;
         })
         .catch(() => caches.match("./index.html"));
