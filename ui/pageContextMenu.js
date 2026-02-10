@@ -172,6 +172,8 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
 
   let clipboard = null;
   let currentPageId = null;
+  let suppressOpenUntil = 0;
+  let lastOpenPointerStamp = -1;
 
   const closeMenu = () => {
     if (menu.hidden) {
@@ -180,6 +182,8 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
     menu.hidden = true;
     currentPageId = null;
     menu.innerHTML = "";
+    menu.style.left = "-9999px";
+    menu.style.top = "-9999px";
     document.removeEventListener("pointerdown", onPointerDown, true);
     document.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("blur", closeMenu);
@@ -218,6 +222,7 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
     hydrateIcons(menu);
 
     menu.querySelector('[data-action="removeContent"]').addEventListener("click", () => {
+      suppressOpenUntil = performance.now() + 260;
       closeMenu();
       store.commit("context-remove-imported-content", (draft) => {
         const draftPage = draft.document.pages.find((candidate) => candidate.id === page.id);
@@ -233,6 +238,7 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
     });
 
     menu.querySelector('[data-action="centerContent"]').addEventListener("click", () => {
+      suppressOpenUntil = performance.now() + 260;
       closeMenu();
       const target = getPageById(store, page.id);
       if (!target || !getPdfImportedFrames(target).length) {
@@ -257,10 +263,12 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
     menu.querySelector('[data-action="copyContent"]').addEventListener("click", () => {
       const sourcePage = getPageById(store, page.id);
       clipboard = createImportedClipboardSnapshot(sourcePage);
+      suppressOpenUntil = performance.now() + 260;
       closeMenu();
     });
 
     menu.querySelector('[data-action="pasteContent"]').addEventListener("click", () => {
+      suppressOpenUntil = performance.now() + 260;
       closeMenu();
       if (!clipboard) {
         return;
@@ -284,6 +292,7 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
     });
 
     menu.querySelector('[data-action="deletePage"]').addEventListener("click", () => {
+      suppressOpenUntil = performance.now() + 260;
       closeMenu();
       if (pageManager.canDelete([page.id])) {
         pageManager.requestDelete([page.id]);
@@ -298,24 +307,40 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
     bindCloseHandlers();
   };
 
-  const onContextMenu = (event) => {
+  const resolvePdfPageFromEvent = (event) => {
     const pageEl = event.target.closest(".page-canvas");
     if (!pageEl || pageEl.classList.contains("virtual-blank")) {
       closeMenu();
-      return;
+      return null;
     }
 
     const pageId = pageEl.dataset.pageId;
     const page = getPageById(store, pageId);
     if (!isPdfImportedPage(page)) {
       closeMenu();
+      return null;
+    }
+    return page;
+  };
+
+  const onContextMenu = (event) => {
+    const page = resolvePdfPageFromEvent(event);
+    if (!page) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
 
-    if (!menu.hidden && currentPageId === pageId) {
+    if (performance.now() < suppressOpenUntil) {
+      return;
+    }
+
+    if (event.pointerId && event.pointerId === lastOpenPointerStamp) {
+      return;
+    }
+
+    if (!menu.hidden && currentPageId === page.id) {
       closeMenu();
       return;
     }
@@ -323,6 +348,35 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
     openMenu(page, event.clientX, event.clientY);
   };
 
+  const onRightPointerDown = (event) => {
+    if (event.button !== 2) {
+      return;
+    }
+
+    const page = resolvePdfPageFromEvent(event);
+    if (!page) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (performance.now() < suppressOpenUntil) {
+      return;
+    }
+
+    lastOpenPointerStamp = event.pointerId || -1;
+
+    if (!menu.hidden && currentPageId === page.id) {
+      closeMenu();
+      return;
+    }
+
+    closeMenu();
+    openMenu(page, event.clientX, event.clientY);
+  };
+
+  viewport.addEventListener("pointerdown", onRightPointerDown, true);
   viewport.addEventListener("contextmenu", onContextMenu);
   viewport.addEventListener("scroll", closeMenu, { passive: true });
   store.subscribe("state:changed", closeMenu);
@@ -330,6 +384,7 @@ export function initPageContextMenu({ store, pageManager, viewport }) {
   return {
     destroy() {
       closeMenu();
+      viewport.removeEventListener("pointerdown", onRightPointerDown, true);
       viewport.removeEventListener("contextmenu", onContextMenu);
       viewport.removeEventListener("scroll", closeMenu);
       menu.remove();
