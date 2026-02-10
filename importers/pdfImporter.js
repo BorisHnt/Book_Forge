@@ -3,6 +3,7 @@ function clamp(value, min, max) {
 }
 
 const PDF_RENDER_TARGET_LONG_EDGE = 1800;
+const PDF_RENDER_JPEG_QUALITY = 0.82;
 let pdfJsModulePromise = null;
 
 function hasBrowserCanvasRuntime() {
@@ -106,7 +107,7 @@ async function renderPdfPageDataUrl(documentHandle, pageNumber) {
     }).promise;
 
     page.cleanup?.();
-    return canvas.toDataURL("image/png");
+    return canvas.toDataURL("image/jpeg", PDF_RENDER_JPEG_QUALITY);
   } catch {
     return "";
   }

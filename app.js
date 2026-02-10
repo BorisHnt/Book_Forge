@@ -231,6 +231,16 @@ async function bootstrap() {
     setStatus("Document sauvegardé localement");
   });
 
+  store.subscribe("save:degraded", ({ droppedDataUrls, reason }) => {
+    const dropped = Number(droppedDataUrls || 0);
+    const mode = reason === "quota-fallback" ? "fallback quota" : "optimisation";
+    setStatus(`Sauvegarde locale (${mode}) · ${dropped} aperçu(x) raster non persisté(s)`);
+  });
+
+  store.subscribe("save:error", () => {
+    setStatus("Erreur sauvegarde locale (quota/localStorage)");
+  });
+
   store.subscribe("BOOK_SETTINGS_DIRTY", () => {
     const draft = draftController.getDraftState();
     if (draft.dirty) {
